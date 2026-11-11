@@ -8,7 +8,7 @@ import { isVisual, layout } from './layout.js';
 import { anim, randomize, rebuild, restore, setMap, setTempo } from './settings.js';
 import { drawSizeBar } from './sizebar.js';
 import { checkpoint, prefs, redoStack, savePrefs, score, snap, ui, undoStack } from './state.js';
-import { TOOLS } from './tools.js';
+import { TOOL, TOOLS } from './tools.js';
 import { paused, playing, setPaused, startAudio } from './transport.js';
 import { MATS, PALETTE } from '../styles/index.js';
 import { switchWorld } from './settings.js';
@@ -50,6 +50,7 @@ export function syncUI() {
   for (const md of MODES) $('mode-' + md.id).hidden = !w.modes.includes(md.id);
   for (const t of TOOLS) $('tool-' + t.id).hidden = !w.tools.includes(t.id);
   MATS.forEach((M, i) => { const b = $('sw-' + i); b.hidden = !w.matIdx.includes(i); b.style.order = w.matIdx.indexOf(i); });
+  $('pixBtn').hidden = !(w.options && w.options.pixel); $('pixBtn').setAttribute('aria-pressed', String(!!score.pixel));
   $('pk2w').hidden = free && !L.rotate;
   for (const md of MODES) $('mode-' + md.id).setAttribute('aria-pressed', String(m === md.id));
   $('modeName').textContent = MODES.find(md => md.id === m).name;
@@ -64,7 +65,7 @@ export function syncUI() {
   for (const t of TOOLS) $('tool-' + t.id).setAttribute('aria-pressed', String(ui.tool === t.id));
   PALETTE.forEach((c, i) => $('sw-' + i).setAttribute('aria-pressed', String(ui.color === i)));
   document.documentElement.style.setProperty('--ink', PALETTE[ui.color]);
-  $('sizeLabel').textContent = ui.tool === 'erase' ? 'Eraser size' : 'Brush size';
+  $('sizeLabel').textContent = ui.tool === 'erase' ? 'Eraser size' : TOOL[ui.tool].stamp ? 'Stamp size' : 'Brush size';
   if (!anim) mapInput.value = String(score.map).padStart(3, '0');
   $('bpmVal').textContent = score.tempo;
   $('undoBtn').disabled = !undoStack.length;
@@ -101,6 +102,12 @@ export function initControls() {
     b.addEventListener('click', () => { ui.color = i; if (ui.tool === 'erase') ui.tool = 'glow'; syncUI(); });
     $('swatches').appendChild(b);
   });
+  // Pixel toggle (Geometric): sits after the colours
+  const pix = document.createElement('button');
+  pix.id = 'pixBtn'; pix.className = 'sw pixtoggle'; pix.hidden = true; pix.title = 'Pixel'; pix.setAttribute('aria-label', 'Pixel');
+  pix.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="5" height="5"/><rect x="9.5" y="9.5" width="5" height="5"/><rect x="15" y="4" width="5" height="5"/><rect x="4" y="15" width="5" height="5"/><rect x="15" y="15" width="5" height="5"/></svg>';
+  pix.addEventListener('click', () => { change(() => score.pixel = !score.pixel); layout(); });
+  $('swatches').appendChild(pix);
   MODES.forEach(md => {
     const b = document.createElement('button');
     b.id = 'mode-' + md.id; b.dataset.v = md.id; b.title = md.name; b.setAttribute('aria-label', md.name);

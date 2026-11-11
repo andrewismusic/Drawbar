@@ -9,6 +9,7 @@ import { drumHit, voice } from './instruments.js';
 import { MAP } from './maps.js';
 import { N } from './nodes.js';
 import { lineNote } from './pitch.js';
+import { TOOL } from '../core/tools.js';
 
 export function playEvent(lane, ev, S) {
   const at = S + pausedTotal - audioOffset;
@@ -17,7 +18,7 @@ export function playEvent(lane, ev, S) {
   if (lane.role === 'drums') { drumHit(ev.piece, t, ev.w, ev.open); return; }
   const pSec = lane.base === 'beat' ? lane.period * 60 / score.tempo : lane.period;
   const dur = clamp((ev.len || 0.1) * pSec, 0.08, 3);
-  const inst = MAP.lineInst[ev.s.tool] || 'piano';
+  const inst = MAP.lineInst[(TOOL[ev.s.tool] && TOOL[ev.s.tool].voice) || ev.s.tool] || 'piano';
   if (ev._rs != null) {
     // Free mode turning: each note is read from where its point has turned to. Higher on screen bends it up, and it drifts across the stereo field
     ev = { ...ev, shift: (ev.shift || 0) + Math.round(Math.max(MAP.hy, 0.35) * (ev.y - ev._ry) / 2 * fs() * MAP.span * MAP.rot.pitch), pan: lerp(ev.pan, clamp(ev._rx * fs(), -1, 1) * 0.6, MAP.rot.pan) };

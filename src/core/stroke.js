@@ -2,6 +2,10 @@
 import { TAU, clamp, hash32, mod, mulberry32 } from './math.js';
 import { buildShape, capsAlong, cloudPuffs, dripsFor, extraPieces, geoChain } from '../render/shapes.js';
 import { MATS } from '../styles/index.js';
+import { TOOL } from './tools.js';
+import { glyphCells, glyphShape, lineSamples } from '../render/glyphs.js';
+import { growPlant } from '../render/plants.js';
+import { stampShape } from '../render/stamps.js';
 
 export function resample(pts, sp) {
   const out = [pts[0].slice()];
@@ -63,7 +67,7 @@ export function prepare(s) {
   }
   let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
   for (let i = 0; i < n; i++) { bx0 = Math.min(bx0, xs[i]); bx1 = Math.max(bx1, xs[i]); by0 = Math.min(by0, ys[i]); by1 = Math.max(by1, ys[i]); }
-  const bm = (MATS[clamp(s.color | 0, 0, MATS.length - 1)].extra === 'vine' || M.spray ? 0.03 : 0.015) * sz + 0.03;
+  const bm = (M.reach || (M.spray ? 0.03 : 0.015)) * sz + 0.03;
   s._bb = [bx0 - bm, by0 - bm, bx1 + bm, by1 + bm];
   Object.assign(s, { _L: L, _len: L[n - 1], _sp: sp, _nx: nx, _ny: ny, _xs: xs, _ys: ys, _sz: sz, _wave: null });
   s._dur = Math.max(p[n - 1][2], 0.35);
@@ -78,6 +82,9 @@ export function prepare(s) {
   path.lineTo(p[n - 1][0], p[n - 1][1]);
   s._path = path;
   s._dot = s._len < 0.02;
+  // Stamps (Geometric): the points are the outline; draw it filled
+  const stamp = TOOL[s.tool] && TOOL[s.tool].stamp;
+  if (stamp) { s._shape = stampShape(stamp, p); return; }
   const tl = Math.max(Math.min(0.03 * Math.sqrt(sz), s._len / 2.2), 1e-4);
   const taper = i => 0.3 + 0.7 * Math.sqrt(clamp(Math.min(L[i] / tl, (s._len - L[i]) / tl), 0, 1));
   if (s.tool !== 'beads') {
@@ -86,7 +93,14 @@ export function prepare(s) {
     for (let i = 0; i < n; i++) w[i] = w0 * taper(i) * (1.35 - 0.95 * speedN(sp[i]));
     s._w = w;
     if (s.tool === 'ripple') { const amp = new Float32Array(n); for (let i = 0; i < n; i++) amp[i] = 1.3 - 1.0 * speedN(sp[i]); s._amp = amp; s._rx = new Float32Array(n); s._ry = new Float32Array(n); }
-    if (s.tool === 'glow') {
+    if (s.tool === 'glow' && M.glyph) {
+      // Code: the cells the line passes through
+      s._shape = glyphShape(glyphCells(lineSamples(xs, ys, w, n - 1, L), s.id), w0);
+    } else if (s.tool === 'glow' && M.plant) {
+      // Garden: a thin stem with the plant grown along it
+      s._shape = buildShape(capsAlong(xs, ys, w.map(v => v * M.stemW), 0, n - 1, 2), [], M.ks, w0 * 0.9);
+      Object.assign(s._shape.paths, growPlant(M.plant, M.keys, s.id, { xs, ys, nx, ny, w, L, n, w0 }));
+    } else if (s.tool === 'glow') {
       let caps = capsAlong(xs, ys, w, 0, n - 1, 2), circ = [], inkCaps = null;
       if (M.extra === 'slime') {
         // Slime: lumpy, swelling and thinning along its length
@@ -132,12 +146,21 @@ export function prepare(s) {
       const a = p[j - 1], b = p[j], seg = (L[j] - L[j - 1]) || 1e-6, u = clamp((d - L[j - 1]) / seg, 0, 1);
       beads.push({ x: a[0] + (b[0] - a[0]) * u, y: a[1] + (b[1] - a[1]) * u, r });
     }
+    if (M.glyph || M.plant) { shapeFromBeads(s, M, beads); return; }
     let caps = [], circ = M.geo ? beads.map((b, i) => [b.x, b.y, b.r * M.geo.bead, M.geo.sides, M.geo.spin + i * M.geo.turn]) : beads.map(b => [b.x, b.y, b.r]);
     if (M.drip) { const d = dripsFor(beads.map(b => [b.x, b.y, b.r]), mulberry32(hash32(s.id, 91))); caps = d.caps; circ = circ.concat(d.circ); }
     const bw0 = beads.reduce((a, b) => a + b.r, 0) / beads.length, inkT = M.comic ? 0.26 * (M.inkW || 1) * bw0 : (M.ink || 0) * bw0;
     s._shape = buildShape(caps, circ, M.ks, bw0, inkT);
   }
+  if (s._dot && (M.glyph || M.plant)) { shapeFromBeads(s, M, [{ x: p[0][0], y: p[0][1], r: (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz }]); return; }
   if (s._dot) { const rr = (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz; s._shape = buildShape([], [M.geo ? [p[0][0], p[0][1], rr * M.geo.bead, M.geo.sides, M.geo.spin] : [p[0][0], p[0][1], rr]], M.ks, rr, M.comic ? 0.26 * rr : (M.ink || 0) * rr); }
+}
+// Code cells or garden blooms at points (Beads, and single dots)
+function shapeFromBeads(s, M, beads) {
+  const bw0 = beads.reduce((a, b) => a + b.r, 0) / beads.length;
+  if (M.glyph) { s._shape = glyphShape(glyphCells(beads.map(b => [b.x, b.y, b.r]), s.id), bw0); return; }
+  const pieces = growPlant(M.plant, M.keys, s.id, null, beads);
+  s._shape = { paths: { ...pieces, 1: pieces.all }, w0: bw0, wd: bw0, ink: null };
 }
 export function sampleArc(s, spacing) {
   const p = s.pts, L = s._L, n = p.length, out = [];

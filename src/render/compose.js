@@ -1,5 +1,5 @@
 // Rendering: the canvases, cached still-stroke layers (pool), glow, re-lighting with cross-fade, auto quality, and frame()
-import { COPIES, cellDims, effEraseR, forCopies, tileGeo } from '../canvas/index.js';
+import { COPIES, cellDims, effEraseR, forCopies, fs, tileGeo } from '../canvas/index.js';
 import { page, preview } from '../core/clips.js';
 import { $ } from '../core/dom.js';
 import { cur, eraseAt, erasing, unrot } from '../core/input.js';
@@ -14,7 +14,9 @@ import { composeRot, drawShape, setComposeRot } from './ops.js';
 import { buildShape, capsAlong, centerPath, geoChain } from './shapes.js';
 import { ARR } from '../sound/arranger.js';
 import { MATS } from '../styles/index.js';
-import { world } from '../worlds/index.js';
+import { pixelScale, world } from '../worlds/index.js';
+import { GCELL, glyphCells, glyphShape, lineSamples } from './glyphs.js';
+import { stampPts, stampShape } from './stamps.js';
 
 export const cv = $('cv'), ctx = cv.getContext('2d');
 export const fb = document.createElement('canvas'), fctx = fb.getContext('2d');
@@ -31,7 +33,7 @@ export function resizeCanvas(w, h, wide) {
   let dpr = Math.min(window.devicePixelRatio || 1, 2) * quality;
   if (2.12 * Rcss * dpr > 2300) dpr = 2300 / (2.12 * Rcss);
   // Pixel world: one canvas pixel per few screen pixels, scaled up crisp by CSS
-  const px = world().render.pixel;
+  const px = pixelScale();
   if (px) dpr = 1 / px;
   cv.classList.toggle('pixel', !!px);
   cv.classList.toggle('wide', wide);
@@ -84,7 +86,7 @@ export function computeHidden() {
     maskX.setTransform(1, 0, 0, 1, 0, 0); maskX.clearRect(0, 0, W, H);
     frameNorm(maskX, maskC); maskX.fillStyle = '#000';
     // Test a slightly fattened outline (shadows and outlines reach a little further than the body)
-    forCopies(maskX, () => { maskX.fill(sil); maskX.lineWidth = sh.w0 * 0.6; maskX.strokeStyle = '#000'; maskX.stroke(sil); if (s.color != null && MATS[s.color].extra === 'vine') { for (const k of ['leaf', 'pet']) sh.paths[k] && (maskX.fill(sh.paths[k]), maskX.stroke(sh.paths[k])); } }, s);
+    forCopies(maskX, () => { maskX.fill(sil); maskX.lineWidth = sh.w0 * 0.6; maskX.strokeStyle = '#000'; maskX.stroke(sil); if (sh.paths.all) { maskX.fill(sh.paths.all); maskX.stroke(sh.paths.all); } else if (s.color != null && MATS[s.color].extra === 'vine') { for (const k of ['leaf', 'pet']) sh.paths[k] && (maskX.fill(sh.paths[k]), maskX.stroke(sh.paths[k])); } }, s);
     const d = maskX.getImageData(0, 0, W, H).data;
     let covered = true, any = false;
     for (let p = 0, q = 3; p < W * H; p++, q += 4) if (d[q] > 6) { any = true; if (!cov[p]) { covered = false; break; } }
@@ -109,6 +111,9 @@ export function unitsOf(strokes) {
   return out;
 }
 export let litRot = 0, litAt = 0, renderMs = 0, relight = null, fade = null;
+// Whether any still stroke on screen is lit (see M.lit). If none is, turning the picture never triggers re-lighting:
+// the cached layers simply turn with it. Flat, code and garden styles are never lit.
+let lightNeeded = false;
 // Re-lighting while the picture turns: redraw the still strokes a slice per frame into a spare set of layers,
 // then cross-fade to them, so the light keeps up without ever stalling a frame
 export function stepRelight(now) {
@@ -135,14 +140,28 @@ export function stepRelight(now) {
     ITEMS = R.items; [pool, poolB] = [poolB, pool]; litRot = R.rot; relight = null;
   }
 }
+// Layers no longer used give their memory back at once (setting a canvas to 0 x 0 frees it; phones have little canvas memory)
+function trimPool(list, used) {
+  for (let i = used; i < list.length; i++) list[i].width = list[i].height = 0;
+  list.length = Math.min(list.length, used);
+}
+// Leaving a tab: drop its cached layers and any re-lighting in progress, and let the next tab measure its own speed
+export function releaseCanvases() {
+  trimPool(pool, 0); trimPool(poolB, 0);
+  ITEMS = []; relight = null; fade = null; groupsDirty = true;
+  if (quality !== 1) { quality = 1; relayout(); }
+  slowFor = fastFor = 0; frameEma = 16;
+}
 export function renderGroups(rot = 0) {
   relight = null; fade = null;
   const t0 = performance.now();
   setComposeRot(litRot = rot); litAt = t0;
   ITEMS = [];
   let gi = 0, cur = null;
+  lightNeeded = false;
   for (const it of unitsOf(score.strokes)) {
     if (it.list) {
+      if (MATS[it.color].lit) lightNeeded = true;
       if (!cur) {
         if (!pool[gi]) { const c = document.createElement('canvas'); c.width = fb.width; c.height = fb.height; pool[gi] = c; }
         const c = pool[gi++], x = c.getContext('2d');
@@ -166,12 +185,14 @@ export function renderGroups(rot = 0) {
     gsctx.globalAlpha = 1;
   }
   gsctx.shadowBlur = 0;
+  trimPool(pool, gi);
   groupsDirty = false;
   renderMs = performance.now() - t0;
 }
 // The shape of a moving stroke for this frame (round capsules, or polygons for geometric materials)
-function animBody(M, xs, ys, w, i1, sz) {
+function animBody(M, xs, ys, w, i1, sz, s, head) {
   const w0 = NEON_W * sz;
+  if (M.glyph) { const smp = lineSamples(xs, ys, w, i1, s._L); return glyphShape(glyphCells(smp, s.id, head ? smp.length - 3 : Infinity), w0); }
   if (M.geo) return buildShape([], geoChain(xs, ys, w, 0, i1, M.geo), M.ks, w0 * 0.9, (M.ink || 0) * w0);
   return buildShape(capsAlong(xs, ys, w, 0, i1, 3), [], M.ks, NEON_W * sz * 0.9, M.comic ? 0.26 * NEON_W * sz : 0);
 }
@@ -182,7 +203,7 @@ export function drawAnim(X, s, S, B) {
     let iT = 0;
     while (iT < n - 1 && s.pts[iT + 1][2] <= T) iT++;
     if (iT < 1) return null;
-    const body = animBody(M, s._xs, s._ys, s._w, iT, s._sz);
+    const body = animBody(M, s._xs, s._ys, s._w, iT, s._sz, s, true);
     forCopies(X, () => drawShape(X, body, M.animOps), s);
     return centerPath(s._xs, s._ys, 0, iT, 4);
   }
@@ -192,11 +213,19 @@ export function drawAnim(X, s, S, B) {
     const u = L[i] / Math.max(s._len, 1e-4), off = amp * s._amp[i] * Math.sin(Math.PI * u) * Math.sin(TAU * (u * s._waves - s._rate * S));
     rx[i] = s._xs[i] + s._nx[i] * off; ry[i] = s._ys[i] + s._ny[i] * off;
   }
-  const body = animBody(M, rx, ry, s._w, n - 1, s._sz);
+  const body = animBody(M, rx, ry, s._w, n - 1, s._sz, s, false);
   forCopies(X, () => drawShape(X, body, M.animOps), s);
   return centerPath(rx, ry, 0, n - 1, 4);
 }
 export function drawPreview(X) {
+  if (cur && cur.stamp) {
+    // A stamp being placed: the real shape, a little see-through, in every copy
+    const sh = stampShape(cur.stamp, stampPts(cur.stamp, cur.cx, cur.cy, cur.r, cur.rot)), r = cur.r + 0.03;
+    X.fillStyle = MATS[cur.color].accent; X.globalAlpha = 0.8;
+    forCopies(X, () => X.fill(sh.paths[1]), { _bb: [cur.cx - r, cur.cy - r, cur.cx + r, cur.cy + r] });
+    X.globalAlpha = 1;
+    return;
+  }
   if (!cur || cur.pts.length < 2) return;
   const path = new Path2D(), M = MATS[cur.color], sz = cur.size, bb = [1e9, 1e9, -1e9, -1e9];
   path.moveTo(cur.pts[0][0], cur.pts[0][1]);
@@ -216,6 +245,13 @@ export function drawGuides(B, rot) {
     const n = COPIES[score.copies] * (score.mirror ? 2 : 1);
     if (n <= 24) for (let k = 0; k < n; k++) { const a = TAU * k / n; ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * ext, Math.sin(a) * ext); }
     ctx.stroke(); ctx.restore(); return;
+  }
+  if (m === 'free' && world().render.grid) {
+    // Code grid (Glitch): the cells marks snap to, faintly
+    const g = GCELL * fs(), e = Math.ceil(ext / g) * g;
+    for (let x = -e; x <= ext; x += g) { ctx.moveTo(x, -ext); ctx.lineTo(x, ext); }
+    for (let y = -e; y <= ext; y += g) { ctx.moveTo(-ext, y); ctx.lineTo(ext, y); }
+    ctx.strokeStyle = '#162019';
   }
   if (m === 'tiles') {
     const g = tileGeo(), sc = scrollAt(B), A = g.a;
@@ -262,7 +298,7 @@ export function frame(now) {
   // While the picture turns, re-light the still strokes now and then so the light stays put (only when that is cheap)
   if (groupsDirty) renderGroups(rot);
   else if (relight) stepRelight(now);
-  else if (!fade && rot !== litRot && Math.abs(mod(rot - litRot + Math.PI, TAU) - Math.PI) > 0.1) relight = { rot: rot + 0.03, i: 0, gi: 0, items: [], cur: null };
+  else if (!fade && lightNeeded && !world().render.fixedLight && rot !== litRot && Math.abs(mod(rot - litRot + Math.PI, TAU) - Math.PI) > 0.1) relight = { rot: rot + 0.03, i: 0, gi: 0, items: [], cur: null };
   if (fade && now - fade.t0 > 160) fade = null;
   setComposeRot(rot);
   fctx.setTransform(1, 0, 0, 1, 0, 0); fctx.clearRect(0, 0, fb.width, fb.height);

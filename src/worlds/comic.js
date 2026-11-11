@@ -1,14 +1,15 @@
 // Comic: flat colour, ink, halftone and hatching. Still strokes are fairly cheap: up to 8 copies, or tiles up to 4 across
-// (5 across with 6 turns took twice v18's redraw time after each stroke).
-// Moving strokes are not: the halftone and ink are rebuilt every frame for every copy (measured ~70 ms a frame at
-// 8 copies with loops, against ~50 ms for v18's default), so Comic keeps to still tools.
+// with up to 4 turns (6 turns, a hex tiling with many more copies, took about 300 ms to redraw after each stroke). Comic shading is lit (cel shadows slide away
+// from the light), but its light turns with the picture instead of being re-lit (render.fixedLight): re-lighting took
+// about a third of all frames in the kaleidoscope and made it stutter; a turning cel-shaded picture looks fine.
+// Moving strokes are not cheap: the halftone and ink are rebuilt every frame for every copy, so Comic keeps to still tools.
 // Later genres: funk, hip-hop, lofi.
 export default {
   id: 'comic', name: 'Comic',
-  mats: ['Comic red', 'Comic yellow', 'Comic blue', 'Comic cloud', 'Ink hatch', 'Flower vine'],
+  mats: ['Comic red', 'Comic yellow', 'Comic blue', 'Comic cloud', 'Ink hatch'],
   tools: ['glow', 'beads', 'erase'],
-  modes: ['kaleido', 'tiles'],
-  limits: { copies: 6, tiles: 4, turns: 4, rotate: false },
+  modes: ['free', 'kaleido', 'tiles'],
+  limits: { copies: 6, tiles: 4, turns: 3, rotate: true },
   start: { mode: 'kaleido', copies: 6, spiral: 0, tiles: 4, turns: 1, mirror: true, fscale: 50, frot: false, fmirror: false, tool: 'glow', color: 'Comic red' },
-  render: {},
+  render: { fixedLight: true },
 };

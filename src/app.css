@@ -159,7 +159,9 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .prow{display:flex; gap:8px; align-items:center}
 .prow .kwrap{width:48px}
 .icon.round{width:46px; height:46px; min-height:46px; border-radius:50%}
-.tools{display:grid; grid-template-columns:repeat(5, 52px); gap:6px}
+/* Tools: a row of up to six (Geometric has five shapes and the eraser) */
+.tools{display:flex; gap:6px}
+.tools .tool{flex:1 1 0; min-width:0; max-width:54px}
 .tool{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; height:54px; padding:0; font-size:11px; color:var(--muted)}
 .tool svg{width:24px; height:24px}
 .tool[aria-pressed="true"]{color:var(--fg); border-color:var(--ink); background:#20253a}
@@ -171,15 +173,20 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .sw{width:28px; height:28px; min-height:28px; padding:0; border-radius:50%; border:2px solid transparent; position:relative}
 .sw::after{content:""; position:absolute; inset:3px; border-radius:50%; background:var(--c)}
 .sw[aria-pressed="true"]{border-color:var(--fg)}
+/* Pixel toggle (Geometric): a square button at the end of the colours */
+.sw.pixtoggle{border-radius:6px; color:var(--muted); background:var(--raise); border-color:var(--line); display:grid; place-items:center; order:99}
+.sw.pixtoggle::after{content:none}
+.sw.pixtoggle svg{width:70%; height:70%}
+.sw.pixtoggle[aria-pressed="true"]{color:var(--ink); border-color:var(--ink)}
 @media (min-width:880px) and (min-aspect-ratio:5/4){
   .group h2{display:block}
   .prow{min-height:64px}
-  .tools{grid-template-columns:repeat(5, 1fr)}
+  .tools .tool{max-width:none}
   .sizegroup{flex:none; max-width:none}
   .swatches{grid-template-columns:repeat(10, minmax(0, 1fr)); gap:4px}
   .sw{width:100%; height:auto; aspect-ratio:1; min-height:0}
 }
-@media (max-width:440px){ .tools{grid-template-columns:repeat(5, minmax(0, 54px))} .swatches{grid-template-columns:repeat(10, minmax(0, 32px)); gap:4px} .sw{width:100%; height:auto; aspect-ratio:1; min-height:0} }
+@media (max-width:440px){ .swatches{grid-template-columns:repeat(10, minmax(0, 32px)); gap:4px} .sw{width:100%; height:auto; aspect-ratio:1; min-height:0} }
 
 /* Clips page */
 .clips{flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding-bottom:12px}

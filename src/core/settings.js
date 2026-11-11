@@ -8,7 +8,7 @@ import { SET_KEYS, checkpoint, mix, prefs, redoStack, savePrefs, score, seeId, s
 import { prepare } from './stroke.js';
 import { setBpm } from './transport.js';
 import { mapInput, syncUI } from './ui.js';
-import { ensureCanvases, fb, markGroupsDirty, refreshHidden } from '../render/compose.js';
+import { ensureCanvases, fb, markGroupsDirty, refreshHidden, releaseCanvases } from '../render/compose.js';
 import { ARR, rearrange } from '../sound/arranger.js';
 import { applyAudio, applyTempoParams } from '../sound/graph.js';
 import { MAP, applyKeyScale, useMap } from '../sound/maps.js';
@@ -97,6 +97,7 @@ const worldStash = {};
 export function switchWorld(id) {
   if (id === score.world || !WORLD[id] || anim) return;
   if (preview) endPreview();
+  releaseCanvases();   // a tab you are not looking at keeps only its drawing as plain data: no layers, no sound
   worldStash[score.world] = { snap: snap(), mix: { ...mix }, undo: undoStack.splice(0), redo: redoStack.splice(0), tool: ui.tool, color: ui.color };
   const w = WORLD[id], st = worldStash[id];
   if (st) {

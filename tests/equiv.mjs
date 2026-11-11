@@ -3,6 +3,8 @@
 // Run: serve the reference build and this build on two ports, then: node tests/equiv.mjs <refUrl> <newUrl>
 // A build with globals (the old single-file index.html, v18) is detected; otherwise the src/ modules are imported.
 import { chromium } from 'playwright';
+// --skip=14,3 leaves those material indices out (for materials whose look changed on purpose, e.g. 14 Flower vine in v20)
+const SKIP = (process.argv.find(a => a.startsWith('--skip=')) || '--skip=').slice(7).split(',').filter(Boolean).map(Number);
 const browser = await chromium.launch();
 // Build a deterministic set of strokes for every v18 material (15) and every tool
 function makeStrokes(nMats) {
@@ -51,14 +53,15 @@ async function run(url) {
         const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
         let h = 0; for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]) >>> 0;
         return { ser, w: cv.width, h: cv.height, px: h, data: Array.from(d.filter((_, i) => i % 97 === 0)), mapN: G.MAP.n, hidden: null };
-      }, { st, map, isNew, strokes: makeStrokes(15) });
+      }, { st, map, isNew, strokes: makeStrokes(15).filter(s => !SKIP.includes(s.color)) });
       results.push({ key: map + ' ' + JSON.stringify(st), ...r });
     }
   }
   await page.close();
   return { results, errors };
 }
-const [refUrl, newUrl] = [process.argv[2] || 'http://localhost:3001/', process.argv[3] || 'http://localhost:3000/'];
+const urls = process.argv.slice(2).filter(a => !a.startsWith('--'));
+const [refUrl, newUrl] = [urls[0] || 'http://localhost:3001/', urls[1] || 'http://localhost:3000/'];
 const a = await run(refUrl), b = await run(newUrl);
 let fail = 0;
 for (let i = 0; i < a.results.length; i++) {

@@ -4,7 +4,7 @@ import { $ } from './dom.js';
 import { clamp } from './math.js';
 import { score, ui } from './state.js';
 import { NEON_W } from './stroke.js';
-import { brushSize, eraseRadius } from './tools.js';
+import { TOOL, brushSize, eraseRadius, stampRadius } from './tools.js';
 import { geo } from '../render/compose.js';
 import { PALETTE } from '../styles/index.js';
 
@@ -18,7 +18,7 @@ export function pill(g, xa, xb, cy, d) {
 // Real size on screen, scaled down only if the largest setting would not fit the bar, so the whole throw stays even
 export function sizeDia() {
   const maxD = $('sizeBar').clientHeight - 6, er = ui.tool === 'erase';
-  const dOf = v => er ? eraseRadius(v) * (effEraseR() / eraseRadius(ui.eraseV)) * 2 * geo.Rcss : 2 * NEON_W * 1.1 * brushSize(v) * geo.Rcss / (score.mode === 'free' ? 1 : 1);
+  const dOf = v => er ? eraseRadius(v) * (effEraseR() / eraseRadius(ui.eraseV)) * 2 * geo.Rcss : TOOL[ui.tool].stamp ? 2 * stampRadius(v) * geo.Rcss : 2 * NEON_W * 1.1 * brushSize(v) * geo.Rcss / (score.mode === 'free' ? 1 : 1);
   const k = Math.min(1, maxD / dOf(100));
   return Math.max(6, dOf(er ? ui.eraseV : ui.brushV) * k);
 }

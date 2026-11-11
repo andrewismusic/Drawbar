@@ -2,6 +2,7 @@
 // A shape holds paths keyed by width factor k (1 = the stroke's own outline), keyed extra pieces and an optional ink outline.
 import { TAU } from '../core/math.js';
 import { rgba } from '../core/color.js';
+import { drawGlyphs } from './glyphs.js';
 
 export const F = (k, c, off = 0, a = 1) => ({ t: 'fill', k, c, off, a });
 export const DROP = a => ({ t: 'drop', a }), CLIP = { t: 'clip' }, END = { t: 'end' };
@@ -52,6 +53,7 @@ export function drawShape(c, sh, ops) {
     if (o.t === 'clip') { c.save(); c.clip(sh.paths[1]); continue; }
     if (o.t === 'end') { c.restore(); continue; }
     if (o.t === 'ink' && !sh.ink) continue;
+    if (o.t === 'glyphs') { if (sh.cells) drawGlyphs(c, sh.cells, o.c); continue; }
     if (o.t === 'stroke') { const pth = sh.paths[o.k]; if (!pth) continue; c.globalAlpha = 1; c.strokeStyle = o.c; c.lineWidth = o.lw * w0; c.lineJoin = 'round'; c.stroke(pth); continue; }
     const drop = o.t === 'drop', off = drop ? -0.4 : o.off, dx = lx * off * w0, dy = ly * off * w0;
     if (o.t === 'half') { c.globalAlpha = o.a; c.fillStyle = halftone(c, o.c, sh.wd || w0); c.translate(dx, dy); c.fill(sh.paths[1]); c.translate(-dx, -dy); continue; }

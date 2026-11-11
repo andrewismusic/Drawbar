@@ -24,7 +24,7 @@ for (const [name, width, height] of sizes) {
     const modes = await page.locator('#modeSeg button:visible').evaluateAll(bs => bs.map(b => b.dataset.v));
     for (const mode of modes) {
       await page.click('#mode-' + mode);
-      const swatches = await page.locator('#swatches .sw:visible').all();
+      const swatches = await page.locator('#swatches .sw:visible:not(.pixtoggle)').all();
       const tools = (await page.locator('#tools .tool:visible').evaluateAll(bs => bs.map(b => b.id.slice(5)))).filter(t => t !== 'erase');
       for (const [i, tool] of tools.entries()) {
         await swatches[(i * 2 + mode.length) % swatches.length].click(); await page.click('#tool-' + tool);

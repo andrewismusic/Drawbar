@@ -4,7 +4,9 @@ import { isVisual } from './layout.js';
 import { rebuild } from './settings.js';
 import { checkpoint, redoStack, score, takeId, ui, undoStack } from './state.js';
 import { prepare, smoothStroke } from './stroke.js';
-import { brushSize } from './tools.js';
+import { TOOL, brushSize, stampRadius } from './tools.js';
+import { clamp } from './math.js';
+import { stampPts } from '../render/stamps.js';
 import { audioReady, beatAt, playing, rotAt, scrollAt, sessionNow, startAudio, visNow } from './transport.js';
 import { syncUI } from './ui.js';
 import { cv, geo, redrawSoon } from '../render/compose.js';
@@ -34,6 +36,12 @@ export function eraseAt(p) {
   const hit = eraseTester(p), next = [];
   let changed = false;
   for (const s of score.strokes) {
+    // A stamp goes all at once, touched anywhere on its outline or in its middle
+    if (TOOL[s.tool] && TOOL[s.tool].stamp) {
+      const c = s._shape && s._shape.center;
+      if (s.pts.some(hit) || (c && hit(c))) changed = true; else next.push(s);
+      continue;
+    }
     const keep = s.pts.map(pt => !hit(pt));
     if (keep.every(Boolean)) { next.push(s); continue; }
     changed = true;
@@ -59,12 +67,22 @@ export function finishStroke(e) {
     erasing = null; rebuild(); syncUI(); return;
   }
   if (!cur || e.pointerId !== cur.id) return;
+  if (cur.stamp) { finishStamp(); return; }
   const p = unrot(toScreen(e)), last = cur.pts[cur.pts.length - 1];
   const t = Math.max(e.timeStamp / 1000 - cur.t0, last[2]);
   if (Math.hypot(p.x - last[0], p.y - last[1]) > 0.002) cur.pts.push([p.x, p.y, t, pressureOf(e)]);
   const pts = cur.pts.length > 2 ? smoothStroke(cur.pts, cur.size) : cur.pts;
   const S = sessionNow();
   const s = { id: takeId(), tool: cur.tool, color: cur.color, size: cur.size, pts, start: S, startBeat: Math.ceil(beatAt(S)) };
+  cur = null;
+  prepare(s);
+  checkpoint();
+  score.strokes.push(s);
+  rebuild(); syncUI();
+}
+function finishStamp() {
+  const S = sessionNow();
+  const s = { id: takeId(), tool: cur.tool, color: cur.color, size: clamp(cur.r * 40, 1.5, 12), pts: stampPts(cur.stamp, cur.cx, cur.cy, cur.r, cur.rot), start: S, startBeat: Math.ceil(beatAt(S)) };
   cur = null;
   prepare(s);
   checkpoint();
@@ -81,11 +99,18 @@ export function initInput() {
       erasing = { id: e.pointerId, p, screen: sc, touched: false, redo: redoStack.slice() };
       checkpoint();
       eraseAt(p);
+    } else if (TOOL[ui.tool].stamp) {
+      // Stamp: a tap places it at the size bar's size; dragging sets its size and turns it to point at the finger
+      cur = { id: e.pointerId, stamp: TOOL[ui.tool].stamp, tool: ui.tool, color: ui.color, cx: p.x, cy: p.y, r: stampRadius(ui.brushV) / (score.mode === 'free' ? fs() : 1), rot: -Math.PI / 2, moved: false, pts: [] };
     } else cur = { id: e.pointerId, tool: ui.tool, color: ui.color, size: brushSize(ui.brushV) / (score.mode === 'free' ? fs() : 1), pts: [[p.x, p.y, 0, pressureOf(e)]], t0: e.timeStamp / 1000, sx: p.x, sy: p.y };
     e.preventDefault();
   });
   cv.addEventListener('pointermove', e => {
-    if (cur && e.pointerId === cur.id) {
+    if (cur && cur.stamp && e.pointerId === cur.id) {
+      const p = unrot(toScreen(e)), d = Math.hypot(p.x - cur.cx, p.y - cur.cy);
+      if (d > 0.012) cur.moved = true;
+      if (cur.moved) { cur.r = Math.max(d, 0.012); cur.rot = Math.atan2(p.y - cur.cy, p.x - cur.cx); }
+    } else if (cur && e.pointerId === cur.id) {
       const list = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
       for (const ev of (list.length ? list : [e])) addPoint(ev);
     } else if (erasing && e.pointerId === erasing.id) {
