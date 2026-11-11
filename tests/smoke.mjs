@@ -16,7 +16,7 @@ for (const [name, width, height] of sizes) {
     for (const q of pts.slice(1)) await page.mouse.move(box.x + box.width * q[0], box.y + box.height * q[1], { steps: 8 });
     await page.mouse.up();
   };
-  const nMats = await page.evaluate(() => MATS.length);
+  const nMats = await page.locator('#swatches .sw').count();
   for (const mode of ['free', 'kaleido', 'tiles']) {
     await page.click('#mode-' + mode);
     for (const [i, tool] of ['glow', 'beads', 'loop', 'ripple'].entries()) {

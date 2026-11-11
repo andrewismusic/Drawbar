@@ -1,28 +1,31 @@
-# Visual Score: hand-off
+# Drawbar: hand-off
 
 A generative music instrument where **the drawing is the score**. You draw with tools and materials on a canvas that repeats your marks (free, kaleidoscope, tiles). A hidden "map" (000–999) turns the drawing into music. Same drawing + same map = same music, always.
 
-This folder continues a prototype built over ~18 versions in a claude.ai conversation. The last published version is v18 (artifact: https://claude.ai/artifact/Hx9TcTZnsncB5bP2baHAVF). The original concept doc is at https://claude.ai/artifact/D8bkZqvpYEzrZAhtXFKVdi. It describes the vision but is out of date on details (it predates v5); this file wins wherever they disagree.
+The app was called Visual Score until v18; it is now **Drawbar**. This folder continues a prototype built over ~18 versions in a claude.ai conversation. The last published version is v18 (artifact: https://claude.ai/artifact/Hx9TcTZnsncB5bP2baHAVF). The original concept doc is at https://claude.ai/artifact/D8bkZqvpYEzrZAhtXFKVdi. It describes the vision but is out of date on details (it predates v5); this file wins wherever they disagree.
 
 ## Files
 
 | Path | What |
 |---|---|
-| `index.html` | The whole app: one self-contained file, no dependencies, no build. ~2,850 lines. Canvas 2D + Web Audio. |
-| `reference/ensemble-engine-v3.html` | An older, shelved sound engine (bass / chords / lead / harmony roles with a chord progression). Kept for ideas when building genre engines. Not used by `index.html`. |
+| `index.html` | Markup only. Loads `src/app.css` and `src/main.js` (an ES module). No build step, no dependencies. |
+| `src/` | The app, as browser ES modules. See "Code map" below. |
+| `reference/ensemble-engine-v3.html` | An older, shelved sound engine (bass / chords / lead / harmony roles with a chord progression). Kept for ideas when building genre engines. Not used by the app. |
 | `tests/smoke.mjs` | Headless Playwright smoke test: draws in every mode and material, checks for page errors and page scroll at three screen sizes. |
+| `tests/equiv.mjs` | Equivalence check for refactors: same seeded strokes into two builds, compares `arrange()` output and canvas pixels (3 maps x 6 pattern settings). |
 
 ## Running it
 
-- `npx serve .` (or `python3 -m http.server`) and open the page. Opening the file directly also works.
+- Serve the folder: `npx serve .` (or `python3 -m http.server`) and open the page. **Opening `index.html` straight from disk no longer works**: browsers refuse to load ES modules from `file://`.
 - Sound starts on the first touch or click anywhere (browser autoplay rules).
-- `node tests/smoke.mjs` runs the smoke test (needs `npm i -D playwright` once).
+- Tests need Playwright (`npm i -D playwright` once, or link an existing install into `node_modules`). With the page served on port 3000: `node tests/smoke.mjs`.
+- To prove a refactor changes nothing, serve the previous build on another port and run `node tests/equiv.mjs <oldUrl> <newUrl>`. The last single-file version (v18) is commit `73ca3f1` (`git show 73ca3f1:index.html`).
 
 ### claude.ai-only features
 
 The page was hosted as a claude.ai artifact, which provides `window.claude.use('db' | 'user' | 'downloads')`. Outside claude.ai `window.claude` is undefined and the code already falls back:
 
-- **Clips** (saved drawings) fall back to `localStorage` (`visual-score-clips`). That fallback works locally as-is.
+- **Clips** (saved drawings) fall back to `localStorage` (`visual-score-clips`). That fallback works locally as-is. The storage keys keep the old name on purpose, so existing clips and preferences survive the rename.
 - **Export** (`saveFile`) needs `downloads`; locally it just shows a toast. **To-do:** add a local fallback (`URL.createObjectURL` + `<a download>`).
 - Preferences are always in `localStorage` (`visual-score-prefs`).
 
@@ -44,31 +47,42 @@ The page was hosted as a claude.ai artifact, which provides `window.claude.use('
 - After visual changes: screenshot-check at tablet landscape (1180×820), tablet portrait (820×1180) and phone (390×844). There must be no page scroll and nothing overlapping the drawing.
 - Performance matters: the owner notices lag. See "Performance" below.
 
-## Code map (`index.html`)
+## Code map (`src/`)
 
-Single `<style>` + markup + one `<script>`. Sections are marked `/* ===== Name ===== */`:
+Entry: `src/main.js` runs the set-up in the same order as the old single file (input, knobs, size bar, clips, export, controls, then first arrange, layout and the frame/schedule loops). Styles: `src/app.css`.
 
-| Section | Contents |
+State that more than one module changes lives with one owner and is changed through a small setter (ES module imports are read-only): `useMap` (maps.js), `rearrange` (arranger.js), `setLastEnd` (transport.js), `takeId`/`seeId` (state.js), `setComposeRot` (ops.js), `markGroupsDirty`/`redrawSoon`/`refreshHidden` (compose.js), `relayout` (layout.js). The audio node table `N` is one shared object (sound/nodes.js).
+
+| File | Contents |
 |---|---|
-| Basics | `mod`, `clamp`, `lerp`, `mulberry32`, `hash32`, `toast` |
-| Palette and tools | **Materials** (`MATS`) and their drawing "op" language (see below); `TOOLS` (Brush, Beads, Loop, Ripple, Erase); `brushSize`, `eraseRadius`; `MODES`; `COPIES`; `TURNS` |
-| Music vocab | Scales, instrument pools per tool, effects list, `MODT` modulation targets |
-| State | `score` (everything saved with a piece), `mix` (4 macro knobs), `ui`, `prefs`, undo/redo (`snap`, `checkpoint`, `SET_KEYS`) |
-| Maps 000–999 | `makeMap(n)`: seeded per-map choices (effects, mixing matrix `W`, mod targets, drum kit and drum params, per-family tone curves, instrument picks, free-rotation response `rot`…) |
-| Stroke geometry | `smoothStroke`, `prepare(s)` (all per-stroke derived data, `_` prefixed), shape building (capsules, beads, puffs, drips, comic ink, slime, vine `extraPieces`) |
-| Pattern geometry | Kaleidoscope copies (`kCopies`: copies + spiral morph), tiles (`tileGeo`: square/hex lattice, 1/2/3/4/6 turns, mirror), phase and pitch readers (`rawH`, `strokePhase`) |
-| Hidden layer: the arranger | `arrange()`: turns strokes into lanes of note events, drums (Euclidean), loops, drones, modulation slots, note budget (`select`) |
-| Pitch / Clock | `scaleMidi` (always snaps to octaves: this fixed clashing parts), tempo-anchored clock `beatAt`/`secAt`, play/stop as a virtual clock (`paused`, `pausedTotal`) |
-| Audio graph | `buildAudio()`: master bus, compressor, reverb, delay, granular, shimmer, smear, spectral thinning, wobble (vibrato/wow/flutter), tremolo, per-family tone chains, `N.wet` (Space), `N.toneVol`/`N.drumVol` (Level knobs) |
-| Instruments | `voice()` (piano, pluck, wave = stroke wavetable, bell, glass, wood, pad), `drumHit()` (hand / acoustic / electro / lofi kits, parametric per map), drones from ripple strokes |
-| Scheduling | `schedule()` every 25 ms with 120 ms lookahead; Density = Euclidean thinning, Probability = seeded hash; free-mode rotation reshapes pitch, pan, rhythm and two effect sends |
-| Rendering | `layout()` (sizes the stage exactly to the drawing), `resizeCanvas`, compose canvas `fb`, cached static groups (`pool`), glow, re-lighting with cross-fade, `frame()`, auto quality |
-| Input | Drawing, erasing (`eraseTester` works through copies and tile wrap), pointer handling |
-| Settings, undo and randomize | `applySettings`, `randomize`/`stepRandomize` (flip-clock map count, eased tempo glide) |
-| Knobs / Size bar | SVG knob component (ring grows thicker with value); Touchy-style size bar (bar thickness = real brush size) |
-| Clips | Pack/unpack drawings (base64 Int16), `db` store with `localStorage` fallback, clips page with thumbnails, preview, load, export, delete |
-| Export | Real-time `MediaRecorder` capture (video+sound, sound, picture); a "one full cycle" length when the piece truly repeats |
-| Controls / Init | Wiring for all buttons, preferences, full screen; init |
+| `core/math.js` | `mod`, `clamp`, `lerp`, `mulberry32`, `hash32`, `hashFrac`, `GOLD`, `SQ3` |
+| `core/dom.js`, `core/color.js` | `$`, `toast`; colour helpers (`tint`, `shade`, `rgba`) |
+| `core/state.js` | `score` (everything saved with a piece), `mix` (4 macro knobs), `ui`, `prefs`, undo/redo (`snap`, `checkpoint`, `SET_KEYS`), stroke ids |
+| `core/tools.js` | `TOOLS` (Brush, Beads, Loop, Ripple, Erase), `brushSize`, `eraseRadius` |
+| `core/stroke.js` | `smoothStroke`, `prepare(s)` (all per-stroke derived data, `_` prefixed), `sampleArc`, `animEventIdx` |
+| `core/transport.js` | Tempo-anchored clock `beatAt`/`secAt`, play/stop as a virtual clock (`paused`, `pausedTotal`), `startAudio`, `rotAt`, `scrollAt` |
+| `core/settings.js` | `rebuild`, `applySettings` (converts old `lattice`/`tess` clips), `restore`, `randomize`/`stepRandomize` (flip-clock map count, eased tempo glide), `setMap`, `setTempo` |
+| `core/layout.js` | `layout()` (sizes the stage exactly to the drawing) |
+| `core/input.js` | Drawing, erasing, pointer handling |
+| `core/knobs.js`, `core/sizebar.js` | SVG knob component (ring grows thicker with value); Touchy-style size bar (bar thickness = real brush size) |
+| `core/clips.js` | Pack/unpack drawings (base64 Int16), `db` store with `localStorage` fallback, clips page |
+| `core/export.js` | Real-time `MediaRecorder` capture; "one full cycle" length when the piece truly repeats |
+| `core/ui.js` | Wiring for all buttons, preferences, full screen; `syncUI` |
+| `canvas/index.js` | `MODES`, shared readers (`rawH` pitch, `strokePhase`, `patternAmount`, `cycleBars`), and dispatch: `forCopies`, `eraseTester`, `effEraseR` |
+| `canvas/free.js`, `kaleido.js`, `tiles.js` | Per mode: geometry (`fs`, `kCopies`, `tileGeo`), drawing copies, eraser through copies / tile wrap |
+| `render/ops.js` | The drawing op language (see below), `localLight`, `drawShape` |
+| `render/shapes.js` | Capsules, `buildShape`, drips, comic puffs, `extraPieces` (slime bubbles, vine leaves and flowers) |
+| `render/compose.js` | Canvases, compose canvas `fb`, cached static groups (`pool`), hidden-stroke test, glow, re-lighting with cross-fade, auto quality, `frame()` |
+| `styles/realistic.js`, `styles/comic.js` | One file per material family: op lists and material entries. `styles/index.js` assembles `MATS` (swatch order) and derived fields |
+| `sound/vocab.js` | Scales, instrument pools per tool, effects list, `MODT` modulation targets |
+| `sound/maps.js` | `makeMap(n)`: seeded per-map choices (effects, mixing matrix `W`, mod targets, drum kit and params, tone curves, instruments, free-rotation response `rot`) |
+| `sound/arranger.js` | `arrange()`: strokes into lanes of note events, drums (Euclidean), loops, drones, modulation slots, note budget (`select`) |
+| `sound/pitch.js` | `scaleMidi` (always snaps to octaves: this fixed clashing parts), `lineNote` |
+| `sound/graph.js` | `buildAudio()` and the `apply*` functions: master bus, compressor, reverb, delay, granular, shimmer, smear, spectral thinning, wobble, tremolo, per-family tone chains, `N.wet` (Space), `N.toneVol`/`N.drumVol` (Level knobs) |
+| `sound/instruments.js`, `sound/drones.js` | `voice()` (piano, pluck, wave = stroke wavetable, bell, glass, wood, pad), `drumHit()` (hand / acoustic / electro / lofi); drones from ripple strokes |
+| `sound/scheduler.js` | `schedule()` every 25 ms with 120 ms lookahead; Density = Euclidean thinning, Probability = seeded hash; free-mode rotation reshapes pitch, pan, rhythm and two effect sends |
+
+There is no `src/worlds/` yet; it arrives with roadmap step 2.
 
 ### Materials: the drawing op language
 
@@ -114,19 +128,15 @@ Tiles is cheaper than kaleidoscope: it draws one repeating cell and fills the vi
 
 **Biggest remaining win (not built):** render each still stroke once into a sprite at 8–16 pre-lit angles, then stamp copies with `drawImage`. Copies become nearly free; lighting is very slightly approximate; costs memory.
 
-## Dead code to remove during the split
+## Dead code
 
-Leftovers from tried-and-dropped ideas:
+Removed during the split: ribbon (`RIB_FRONT`, `RIB_BACK`, `ribbonFace`, the `M.ribbon` branch, `multi` shapes, `backOps`), popcorn puffs, blob shading and stroke merging (`metalBlob`, `creamBlob`, `GLOSS`, `blobOps`, `_blob`, the `if (false)` merge, `_mkey`/`_mshape`, `_prims`), the `paste`/`swirl`/`twist`/`sprinkles` pieces and their op lists, `SHADE_SIDE`, `ramp` and `sampleStops`.
 
-- **Ribbon:** `RIB_FRONT`, `RIB_BACK`, `ribbonFace`, the `M.ribbon` branch in `prepare`, the `multi` shape path in `drawUnit`.
-- **Popcorn:** the `'popcorn'` puffs branch.
-- **Blob shading / stroke merging:** `metalBlob`, `creamBlob`, `GLOSS` op, `M.blobOps`, `_blob`, the `if (false)` merge in `unitsOf`, `_mkey`/`_mshape`.
-- **Removed materials' pieces:** `extraPieces` kinds `paste`, `swirl`, `twist`, `sprinkles`; the `toothpaste`, `glass`, `marble`, `gummy` and `sprinkles` op lists, and `SHADE_SIDE` (only they use it).
-- **Unused helper:** `ramp` (`softPuffs` is still used by Cloud; keep it).
+Still unused, left for now: `DISC` (color.js), `DROP`, `INK` (ops.js), `bbHit`, `litAt`, `renderMs` (compose.js), `stopAudio` (transport.js), `downloadsCap` (export.js).
 
 ## Roadmap agreed with the owner
 
-### 1. Split into modules (first job)
+### 1. Split into modules (done)
 
 Keep it buildless if possible (ES modules in the browser), or use Vite. Suggested layout:
 
@@ -141,6 +151,8 @@ src/worlds/    one file per world (art style + canvas defaults + genre engine)
 ```
 
 Behaviour must be identical after the split. Use the smoke test plus side-by-side screenshots, and a seeded audio check (same drawing + map produces the same event list from `arrange()`).
+
+**Done:** buildless ES modules, layout as above. Checked with `tests/smoke.mjs` (passes at all three sizes) and `tests/equiv.mjs` against v18: identical `arrange()` output and identical canvas pixels for 16 strokes (every material, all four tools) across 3 maps x 6 pattern settings. Visible changes: the name (Drawbar, in the title and top bar), export file names (`drawbar-417.mp4`), and the page must now be served rather than opened from disk.
 
 ### 2. "Worlds": one app, art styles paired with genres
 

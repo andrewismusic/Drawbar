@@ -1,0 +1,144 @@
+// Controls: wiring for all buttons, preferences, full screen, and syncUI()
+import { MODES, mirrored } from '../canvas/index.js';
+import { endPreview, keepClip, page, preview, showPage } from './clips.js';
+import { $ } from './dom.js';
+import { openExport } from './export.js';
+import { P1, P2, mixKnobs, pk1, pk2, pm } from './knobs.js';
+import { isVisual, layout } from './layout.js';
+import { anim, randomize, rebuild, restore, setMap, setTempo } from './settings.js';
+import { drawSizeBar } from './sizebar.js';
+import { checkpoint, prefs, redoStack, savePrefs, score, snap, ui, undoStack } from './state.js';
+import { TOOLS } from './tools.js';
+import { paused, playing, setPaused, startAudio } from './transport.js';
+import { MATS, PALETTE } from '../styles/index.js';
+
+export const mapInput = $('mapInput');
+export const change = fn => { checkpoint(); fn(); rebuild(); syncUI(); };
+// Preferences
+export const settings = $('settings');
+export const openSettings = open => { settings.hidden = !open; for (const b of document.querySelectorAll('.cogbtn')) b.setAttribute('aria-expanded', String(open)); };
+export const showGlide = () => { $('prGlide').value = prefs.glide; $('prGlideOut').textContent = (prefs.glide / 1000).toFixed(1) + ' s'; };
+export function applyView() {
+  for (const b of $('shapeSeg').children) b.setAttribute('aria-pressed', String(b.dataset.v === prefs.shape));
+  requestAnimationFrame(layout);
+}
+// Visual only: full screen, nothing else. Any tap comes back
+export function setVisual(on) {
+  if (on === isVisual()) return;
+  if (on && page === 'clips') showPage('canvas');
+  openSettings(false);
+  $('app').classList.toggle('visual', on);
+  if (on) { const el = document.documentElement; if (el.requestFullscreen) el.requestFullscreen().catch(() => {}); }
+  else if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  requestAnimationFrame(layout);
+}
+export function syncSound() {
+  const on = playing && !paused;
+  $('playBtn').classList.toggle('paused', !on);
+  $('playBtn').setAttribute('aria-label', on ? 'Stop' : 'Play');
+}
+export function syncUI() {
+  const m = score.mode, free = m === 'free';
+  for (const md of MODES) $('mode-' + md.id).setAttribute('aria-pressed', String(m === md.id));
+  $('modeName').textContent = MODES.find(md => md.id === m).name;
+  for (const v of ['tones', 'both', 'drums']) $('inst-' + v).setAttribute('aria-pressed', String(score.inst === v));
+  $('timeC').setAttribute('aria-pressed', String(score.timing === 'clocked'));
+  $('timeH').setAttribute('aria-pressed', String(score.timing === 'hand'));
+  $('pk2').hidden = free; $('rotBtn').hidden = !free;
+  $('pk1l').textContent = P1[pm()][3]; $('pk1').setAttribute('aria-label', P1[pm()][3]);
+  $('pk2l').textContent = free ? 'Rotate' : P2[pm()][3]; $('pk2').setAttribute('aria-label', P2[pm()][3]);
+  $('mirrorBtn').setAttribute('aria-pressed', String(mirrored()));
+  $('rotBtn').setAttribute('aria-pressed', String(score.frot));
+  for (const t of TOOLS) $('tool-' + t.id).setAttribute('aria-pressed', String(ui.tool === t.id));
+  PALETTE.forEach((c, i) => $('sw-' + i).setAttribute('aria-pressed', String(ui.color === i)));
+  document.documentElement.style.setProperty('--ink', PALETTE[ui.color]);
+  $('sizeLabel').textContent = ui.tool === 'erase' ? 'Eraser size' : 'Brush size';
+  if (!anim) mapInput.value = String(score.map).padStart(3, '0');
+  $('bpmVal').textContent = score.tempo;
+  $('undoBtn').disabled = !undoStack.length;
+  $('redoBtn').disabled = !redoStack.length;
+  $('clearBtn').disabled = !score.strokes.length;
+  pk1.draw(); pk2.draw(); for (const key in mixKnobs) mixKnobs[key].draw();
+  drawSizeBar(); syncSound();
+}
+// All the buttons, the tempo box, the map number and preferences
+export function initControls() {
+  TOOLS.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'tool'; b.id = 'tool-' + t.id;
+    b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${t.icon}</svg><span>${t.name}</span>`;
+    b.addEventListener('click', () => { ui.tool = t.id; syncUI(); });
+    $('tools').appendChild(b);
+  });
+  PALETTE.forEach((c, i) => {
+    const b = document.createElement('button');
+    b.className = 'sw'; b.id = 'sw-' + i; b.style.setProperty('--c', MATS[i].swatch); b.setAttribute('aria-label', MATS[i].name); b.title = MATS[i].name;
+    b.addEventListener('click', () => { ui.color = i; if (ui.tool === 'erase') ui.tool = 'glow'; syncUI(); });
+    $('swatches').appendChild(b);
+  });
+  MODES.forEach(md => {
+    const b = document.createElement('button');
+    b.id = 'mode-' + md.id; b.dataset.v = md.id; b.title = md.name; b.setAttribute('aria-label', md.name);
+    b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${md.icon}</svg>`;
+    $('modeSeg').appendChild(b);
+  });
+  $('modeSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.mode) change(() => score.mode = v); });
+  $('timeSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.timing) change(() => score.timing = v); });
+  $('instSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.inst) change(() => score.inst = v); });
+  $('mirrorBtn').addEventListener('click', () => change(() => { if (score.mode === 'free') score.fmirror = !score.fmirror; else score.mirror = !score.mirror; }));
+  $('rotBtn').addEventListener('click', () => change(() => score.frot = !score.frot));
+  $('undoBtn').addEventListener('click', () => { if (undoStack.length && !anim) { if (preview) endPreview(); redoStack.push(snap()); restore(undoStack.pop()); } });
+  $('redoBtn').addEventListener('click', () => { if (redoStack.length && !anim) { if (preview) endPreview(); undoStack.push(snap()); restore(redoStack.pop()); } });
+  $('clearBtn').addEventListener('click', () => { if (score.strokes.length) change(() => score.strokes = []); });
+  $('playBtn').addEventListener('click', () => { if (!playing) { startAudio(); setPaused(false); } else setPaused(!paused); });
+  $('dice').addEventListener('click', randomize);
+  $('clipBtn').addEventListener('click', keepClip);
+  $('clipsNav').addEventListener('click', () => showPage(page === 'clips' ? 'canvas' : 'clips'));
+  $('clipsBack').addEventListener('click', () => showPage('canvas'));
+  $('nowStop').addEventListener('click', endPreview);
+  $('nowExport').addEventListener('click', openExport);
+  $('exportBtn').addEventListener('click', openExport);
+
+  // BPM box: drag up or down
+  {
+    const el = $('bpm');
+    let drag = null;
+    el.addEventListener('pointerdown', e => { drag = { y: e.clientY, x: e.clientX, v: score.tempo, started: false }; try { el.setPointerCapture(e.pointerId); } catch (err) {} el.classList.add('dragging'); e.preventDefault(); });
+    el.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const nv = drag.v + ((e.clientX - drag.x) - (e.clientY - drag.y)) / 3;
+      if (!drag.started && Math.round(nv) !== drag.v) { drag.started = true; checkpoint(); }
+      if (drag.started) setTempo(nv);
+    });
+    const end = () => { if (drag) { if (drag.started) { rebuild(); syncUI(); } drag = null; el.classList.remove('dragging'); } };
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+    el.addEventListener('keydown', e => {
+      const step = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[e.key];
+      if (step) { checkpoint(); setTempo(score.tempo + step); rebuild(); syncUI(); e.preventDefault(); }
+    });
+  }
+  mapInput.addEventListener('focus', () => mapInput.select());
+  mapInput.addEventListener('input', () => {
+    const v = mapInput.value.replace(/\D/g, '').slice(0, 3);
+    mapInput.value = v;
+    if (v.length === 3) { setMap(+v); mapInput.blur(); }
+  });
+  mapInput.addEventListener('keydown', e => { if (e.key === 'Enter') { const v = mapInput.value.replace(/\D/g, ''); if (v) setMap(+v); mapInput.blur(); } });
+  mapInput.addEventListener('blur', () => { if (!anim) mapInput.value = String(score.map).padStart(3, '0'); });
+
+  for (const b of document.querySelectorAll('.cogbtn')) b.addEventListener('click', () => openSettings(settings.hidden));
+  $('closeSettings').addEventListener('click', () => openSettings(false));
+  document.addEventListener('pointerdown', e => { if (!settings.hidden && !settings.contains(e.target) && !e.target.closest('.cogbtn')) openSettings(false); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { openSettings(false); $('exportDlg').hidden = true; setVisual(false); } });
+  for (const [id, k] of [['prTempo', 'rTempo'], ['prMode', 'rMode'], ['prFolds', 'rFolds']]) {
+    $(id).checked = !!prefs[k];
+    $(id).addEventListener('change', e => { prefs[k] = e.target.checked; savePrefs(); });
+  }
+  $('prGlide').addEventListener('input', e => { prefs.glide = +e.target.value; showGlide(); savePrefs(); });
+  showGlide();
+  $('shapeSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v) { prefs.shape = v; savePrefs(); applyView(); } });
+  $('visualBtn').addEventListener('click', () => setVisual(true));
+  $('main').addEventListener('click', () => { if (isVisual()) setVisual(false); });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isVisual()) setVisual(false); });
+
+}

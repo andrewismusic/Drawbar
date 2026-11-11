@@ -1,10 +1,11 @@
 {
-  "name": "visual-score",
+  "name": "drawbar",
   "private": true,
   "type": "module",
   "scripts": {
     "serve": "npx serve -l 3000 .",
-    "test": "node tests/smoke.mjs"
+    "test": "node tests/smoke.mjs",
+    "equiv": "node tests/equiv.mjs"
   },
   "devDependencies": {
     "playwright": "^1.47.0"
