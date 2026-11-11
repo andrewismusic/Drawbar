@@ -24,20 +24,40 @@ export function capsAlong(xs, ys, w, i0, i1, step) {
   if (i1 <= i0) caps.push([xs[i0], ys[i0], w[i0], xs[i0], ys[i0], w[i0]]);
   return caps;
 }
+// A regular polygon, wound the same way as the arcs so overlapping pieces fill as one shape (geometric materials)
+export function addPoly(pth, x, y, r, sides, rot) {
+  pth.moveTo(x + r * Math.cos(rot), y + r * Math.sin(rot));
+  for (let i = 1; i < sides; i++) { const a = rot + TAU * i / sides; pth.lineTo(x + r * Math.cos(a), y + r * Math.sin(a)); }
+  pth.closePath();
+}
+// Geometric brush: polygons placed along the line and turned to follow it. Returned as circle entries [x, y, r, sides, rot].
+export function geoChain(xs, ys, w, i0, i1, g) {
+  const out = [];
+  let d = 0, next = 0, k = 0;
+  for (let i = i0; i <= i1; i++) {
+    if (i > i0) d += Math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1]);
+    if (d < next && i < i1) continue;
+    const a = Math.min(i + 1, i1), b = Math.max(i - 1, i0), ang = a === b ? 0 : Math.atan2(ys[a] - ys[b], xs[a] - xs[b]);
+    const r = Math.max(w[i], 1e-4) * g.size;
+    out.push([xs[i], ys[i], r, g.sides, ang + g.spin + (g.alt && k % 2 ? Math.PI / g.sides : 0)]);
+    next = d + r * g.gap; k++;
+  }
+  return out;
+}
 // inkT: an outline of constant thickness around everything (so tips get the same ink as the body); inkCaps: a hand-varied outline instead
 export function buildShape(caps, circles, ks, w0, inkT = 0, inkCaps = null) {
   const paths = {};
   for (const k of ks) {
     const pth = new Path2D();
     for (const c of caps) addCap(pth, c[0], c[1], c[2] * k, c[3], c[4], c[5] * k);
-    for (const [x, y, rr] of circles) { pth.moveTo(x + rr * k, y); pth.arc(x, y, rr * k, 0, TAU); }
+    for (const [x, y, rr, sides, rot] of circles) { if (sides) addPoly(pth, x, y, rr * k, sides, rot); else { pth.moveTo(x + rr * k, y); pth.arc(x, y, rr * k, 0, TAU); } }
     paths[k] = pth;
   }
   let ink = null;
   if (inkT || inkCaps) {
     ink = new Path2D();
     for (const c of inkCaps || caps) inkCaps ? addCap(ink, ...c) : addCap(ink, c[0], c[1], c[2] + inkT, c[3], c[4], c[5] + inkT);
-    for (const [x, y, rr] of circles) { ink.moveTo(x + rr + inkT, y); ink.arc(x, y, rr + inkT, 0, TAU); }
+    for (const [x, y, rr, sides, rot] of circles) { if (sides) addPoly(ink, x, y, rr + inkT / Math.cos(Math.PI / sides), sides, rot); else { ink.moveTo(x + rr + inkT, y); ink.arc(x, y, rr + inkT, 0, TAU); } }
   }
   return { paths, w0, wd: w0, ink };
 }

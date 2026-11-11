@@ -1,6 +1,6 @@
 // Stroke geometry: smoothing, and all per-stroke derived data (the _ prefixed fields) made by prepare(s)
 import { TAU, clamp, hash32, mod, mulberry32 } from './math.js';
-import { buildShape, capsAlong, cloudPuffs, dripsFor, extraPieces } from '../render/shapes.js';
+import { buildShape, capsAlong, cloudPuffs, dripsFor, extraPieces, geoChain } from '../render/shapes.js';
 import { MATS } from '../styles/index.js';
 
 export function resample(pts, sp) {
@@ -63,7 +63,7 @@ export function prepare(s) {
   }
   let bx0 = 1e9, by0 = 1e9, bx1 = -1e9, by1 = -1e9;
   for (let i = 0; i < n; i++) { bx0 = Math.min(bx0, xs[i]); bx1 = Math.max(bx1, xs[i]); by0 = Math.min(by0, ys[i]); by1 = Math.max(by1, ys[i]); }
-  const bm = (MATS[clamp(s.color | 0, 0, MATS.length - 1)].extra === 'vine' ? 0.03 : 0.015) * sz + 0.03;
+  const bm = (MATS[clamp(s.color | 0, 0, MATS.length - 1)].extra === 'vine' || M.spray ? 0.03 : 0.015) * sz + 0.03;
   s._bb = [bx0 - bm, by0 - bm, bx1 + bm, by1 + bm];
   Object.assign(s, { _L: L, _len: L[n - 1], _sp: sp, _nx: nx, _ny: ny, _xs: xs, _ys: ys, _sz: sz, _wave: null });
   s._dur = Math.max(p[n - 1][2], 0.35);
@@ -95,12 +95,13 @@ export function prepare(s) {
         caps = capsAlong(xs, ys, ws, 0, n - 1, 2);
       }
       if (M.extra === 'vine') caps = capsAlong(xs, ys, w.map(v => v * 0.34), 0, n - 1, 2);
-      const inkT = M.comic ? 0.26 * w0 : 0;
+      const inkT = M.comic ? 0.26 * (M.inkW || 1) * w0 : (M.ink || 0) * w0;
       if (M.puffs) { caps = []; circ = cloudPuffs(s, M.puffs); }
+      else if (M.geo) { caps = []; circ = geoChain(xs, ys, w, 0, n - 1, M.geo); }
       else if (M.comic) {
         // Comic ink swells and thins a little along the line, like a brush pen, but never vanishes at the tips
         const rr = mulberry32(hash32(s.id, 33)), p1 = rr() * TAU, p2 = rr() * TAU;
-        const iw = M.extra === 'vine' ? 0.4 : 1;
+        const iw = M.extra === 'vine' ? 0.4 : M.inkW || 1;
         inkCaps = caps.map(([ax, ay, ar, bx, by, br], i) => { const t = L[Math.min(i * 2, n - 1)] / w0; return [ax, ay, ar + iw * w0 * (0.26 + 0.08 * Math.sin(t / 2.4 + p1) + 0.04 * Math.sin(t / 0.9 + p2)), bx, by, br + iw * w0 * (0.26 + 0.08 * Math.sin(t / 2.4 + p1) + 0.04 * Math.sin(t / 0.9 + p2))]; });
       }
       if (M.drip) {
@@ -131,12 +132,12 @@ export function prepare(s) {
       const a = p[j - 1], b = p[j], seg = (L[j] - L[j - 1]) || 1e-6, u = clamp((d - L[j - 1]) / seg, 0, 1);
       beads.push({ x: a[0] + (b[0] - a[0]) * u, y: a[1] + (b[1] - a[1]) * u, r });
     }
-    let caps = [], circ = beads.map(b => [b.x, b.y, b.r]);
+    let caps = [], circ = M.geo ? beads.map((b, i) => [b.x, b.y, b.r * M.geo.bead, M.geo.sides, M.geo.spin + i * M.geo.turn]) : beads.map(b => [b.x, b.y, b.r]);
     if (M.drip) { const d = dripsFor(beads.map(b => [b.x, b.y, b.r]), mulberry32(hash32(s.id, 91))); caps = d.caps; circ = circ.concat(d.circ); }
-    const bw0 = beads.reduce((a, b) => a + b.r, 0) / beads.length, inkT = M.comic ? 0.26 * bw0 : 0;
+    const bw0 = beads.reduce((a, b) => a + b.r, 0) / beads.length, inkT = M.comic ? 0.26 * (M.inkW || 1) * bw0 : (M.ink || 0) * bw0;
     s._shape = buildShape(caps, circ, M.ks, bw0, inkT);
   }
-  if (s._dot) { const rr = (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz; s._shape = buildShape([], [[p[0][0], p[0][1], rr]], M.ks, rr, M.comic ? 0.26 * rr : 0); }
+  if (s._dot) { const rr = (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz; s._shape = buildShape([], [M.geo ? [p[0][0], p[0][1], rr * M.geo.bead, M.geo.sides, M.geo.spin] : [p[0][0], p[0][1], rr]], M.ks, rr, M.comic ? 0.26 * rr : (M.ink || 0) * rr); }
 }
 export function sampleArc(s, spacing) {
   const p = s.pts, L = s._L, n = p.length, out = [];

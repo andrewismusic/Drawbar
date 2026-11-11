@@ -10,6 +10,8 @@ export const INK = (k, off) => ({ t: 'ink', k, c: '#0c0c12', off, a: 1 }), HALF 
 export const S = (k, c, off, blur, a = 1) => ({ t: 'fill', k, c, off, blur, a });
 export const PAT = (pat, c, off = 0) => ({ t: 'fill', k: 1, pat, c, off, a: 1 });
 export const SOFTDROP = a => ({ t: 'drop', a });
+// Hard drop shadow: a plain offset fill, no blur (pixel art)
+export const HDROP = a => ({ t: 'drop', a, hard: true, c: '#000' });
 export const INKL = off => ({ t: 'ink', c: '#0c0c12', off, a: 1 });
 export const STROKE = (k, lw, c = '#0c0c12') => ({ t: 'stroke', k, lw, c });
 export const halfTiles = new Map();
@@ -19,7 +21,8 @@ export function patTile(kind, color) {
   if (!tile) {
     tile = document.createElement('canvas'); tile.width = tile.height = 12;
     const g = tile.getContext('2d'); g.fillStyle = g.strokeStyle = color;
-    if (kind === 'dots') { g.beginPath(); g.arc(3, 3, 2.1, 0, TAU); g.arc(9, 9, 2.1, 0, TAU); g.fill(); }
+    if (kind === 'scan') { g.fillRect(0, 0, 12, 2); g.fillRect(0, 6, 12, 2); }
+    else if (kind === 'dots') { g.beginPath(); g.arc(3, 3, 2.1, 0, TAU); g.arc(9, 9, 2.1, 0, TAU); g.fill(); }
     else { g.lineWidth = 1.9; g.beginPath(); g.moveTo(-3, 15); g.lineTo(15, -3); g.moveTo(-9, 9); g.lineTo(9, -9); g.moveTo(3, 21); g.lineTo(21, 3); if (kind === 'cross') { g.moveTo(-3, -3); g.lineTo(15, 15); g.moveTo(-9, 3); g.lineTo(9, 21); g.moveTo(3, -9); g.lineTo(21, 9); } g.stroke(); }
     halfTiles.set(key, tile);
   }

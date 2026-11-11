@@ -5,10 +5,12 @@ import { openExport } from './export.js';
 import { layout } from './layout.js';
 import { clamp } from './math.js';
 import { restore } from './settings.js';
-import { MIX_DEF, checkpoint, mix, score, snap } from './state.js';
+import { MIX_DEF, checkpoint, mix, score, snap, ui } from './state.js';
 import { beatAt, playing, sessionNow, startAudio } from './transport.js';
 import { cv } from '../render/compose.js';
 import { applyAudio } from '../sound/graph.js';
+import { switchWorld } from './settings.js';
+import { WORLD } from '../worlds/index.js';
 
 export function b64(bytes) { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); }
 export function unb64(str) { const s = atob(str), b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
@@ -28,6 +30,8 @@ export function unpackState(json) {
     for (let i = 0; i < a.length; i += 4) pts.push([a[i] / 8000, a[i + 1] / 8000, a[i + 2] / 100, a[i + 3] / 1000]);
     return { id: s.i, tool: s.t, color: s.c, size: s.z, pts, start: S, startBeat: sb };
   });
+  // Clips from before the style tabs belong to Classic
+  if (!WORLD[o.set.world]) o.set.world = 'classic';
   return { snap: { set: o.set, strokes }, mix: o.mix || { ...MIX_DEF } };
 }
 export const localStore = {
@@ -77,7 +81,7 @@ export function ago(ts) {
 }
 export function startPreview(c) {
   if (preview && preview.id === c.id) return;
-  const saved = preview ? preview.saved : { snap: snap(), mix: { ...mix } };
+  const saved = preview ? preview.saved : { snap: snap(), mix: { ...mix }, tool: ui.tool, color: ui.color };
   let st;
   try { st = unpackState(c.data); } catch (e) { toast('That clip could not be opened'); return; }
   preview = { id: c.id, name: c.name, saved };
@@ -89,6 +93,7 @@ export function endPreview() {
   if (!preview) return;
   const s = preview.saved;
   preview = null;
+  ui.tool = s.tool; ui.color = s.color;
   Object.assign(mix, s.mix); restore(s.snap); applyAudio(0.05);
   if (page === 'clips') renderClips();
 }
@@ -96,6 +101,8 @@ export function loadClip(c) {
   let st;
   try { st = unpackState(c.data); } catch (e) { toast('That clip could not be opened'); return; }
   if (preview) endPreview();
+  // A clip opens in its own style tab
+  if (st.snap.set.world !== score.world) switchWorld(st.snap.set.world);
   checkpoint();
   Object.assign(mix, st.mix); restore(st.snap); applyAudio(0.05);
   showPage('canvas');

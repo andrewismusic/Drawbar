@@ -4,7 +4,7 @@
 // A build with globals (the old single-file index.html, v18) is detected; otherwise the src/ modules are imported.
 import { chromium } from 'playwright';
 const browser = await chromium.launch();
-// Build a deterministic set of strokes for every material and tool
+// Build a deterministic set of strokes for every v18 material (15) and every tool
 function makeStrokes(nMats) {
   const out = []; let id = 1;
   const tools = ['glow', 'beads', 'loop', 'ripple'];
@@ -30,6 +30,8 @@ async function run(url) {
   await page.addInitScript(() => { performance.now = () => 1000; });
   await page.goto(url); await page.waitForTimeout(500);
   const isNew = await page.evaluate(() => typeof window.arrange !== 'function');
+  // The style tabs take some height; hide them so both builds get the same canvas size and the pixels can be compared
+  if (isNew) { await page.addStyleTag({ content: '#worldTabs{display:none!important}' }); await page.waitForTimeout(300); }
   const results = [];
   for (const map of [417, 73, 908]) {
     for (const st of settings) {
@@ -49,7 +51,7 @@ async function run(url) {
         const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
         let h = 0; for (let i = 0; i < d.length; i += 7) h = (h * 31 + d[i]) >>> 0;
         return { ser, w: cv.width, h: cv.height, px: h, data: Array.from(d.filter((_, i) => i % 97 === 0)), mapN: G.MAP.n, hidden: null };
-      }, { st, map, isNew, strokes: makeStrokes(16) });
+      }, { st, map, isNew, strokes: makeStrokes(15) });
       results.push({ key: map + ' ' + JSON.stringify(st), ...r });
     }
   }
@@ -65,7 +67,7 @@ for (let i = 0; i < a.results.length; i++) {
   let diff = 0; for (let j = 0; j < x.data.length; j++) if (Math.abs(x.data[j] - y.data[j]) > 2) diff++;
   const ok = arrSame && x.w === y.w && x.h === y.h && diff === 0;
   if (!ok) fail++;
-  console.log(ok ? 'SAME' : 'DIFF', x.key, 'arrange', arrSame ? 'same' : 'DIFFERENT', `(${x.ser.length} chars)`, 'canvas', `${x.w}x${x.h}`, 'pixels differing', diff, '/', x.data.length, 'distinct values', new Set(x.data).size, 'map', x.mapN, y.mapN, x.px === y.px ? 'hash-equal' : 'hash-differs');
+  console.log(ok ? 'SAME' : 'DIFF', x.key, 'arrange', arrSame ? 'same' : 'DIFFERENT', `(${x.ser.length} chars)`, 'canvas', `${x.w}x${x.h}` + (x.w === y.w && x.h === y.h ? '' : ` vs ${y.w}x${y.h}`), 'pixels differing', diff, '/', x.data.length, 'distinct values', new Set(x.data).size, 'map', x.mapN, y.mapN, x.px === y.px ? 'hash-equal' : 'hash-differs');
 }
 console.log('errors old', a.errors, 'new', b.errors);
 console.log(fail ? `FAIL ${fail}` : 'ALL SAME');

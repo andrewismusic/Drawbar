@@ -89,6 +89,13 @@ button:disabled{opacity:.35; cursor:default}
   #mapInput, .bpm{height:38px}
 }
 
+/* Style tabs: one per world. Scrolls sideways on its own when narrow, never the page. */
+.worlds{position:relative; display:flex; gap:4px; flex:none; min-width:0; overflow-x:auto; scrollbar-width:none; margin-top:-4px}
+.worlds::-webkit-scrollbar{display:none}
+.worlds button{flex:none; min-height:32px; padding:0 13px; border-radius:999px; background:transparent; border-color:transparent; color:var(--muted); font-size:13px}
+.worlds button:hover{color:var(--fg)}
+.worlds button[aria-selected="true"]{color:var(--bg); background:var(--fg); border-color:var(--fg)}
+
 /* Preferences */
 .settings{
   position:fixed; top:64px; right:max(16px, env(safe-area-inset-right, 0px)); z-index:40; width:min(330px, calc(100vw - 32px));
@@ -121,6 +128,8 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .stage{position:relative; flex:none}
 #cv{position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none}
 #cv.wide{border-radius:14px}
+/* Pixel world: the canvas is drawn small and scaled up without smoothing */
+#cv.pixel{image-rendering:crisp-edges; image-rendering:pixelated}
 .recpill{
   position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:45; display:flex; align-items:center; gap:10px;
   background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:4px 4px 4px 14px; white-space:nowrap;

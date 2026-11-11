@@ -8,6 +8,7 @@ import { syncUI } from './ui.js';
 import { redrawSoon } from '../render/compose.js';
 import { applySpace, applyTone, applyVolumes } from '../sound/graph.js';
 import { PALETTE } from '../styles/index.js';
+import { world } from '../worlds/index.js';
 
 export function ringPath(f0, f1) {
   const n = Math.max(2, Math.ceil((f1 - f0) * 60)), r = 17, out = [], inn = [];
@@ -67,6 +68,11 @@ export const mixKnobs = {};
 export const P1 = { free: ['fscale', 0, 100, 'Size', v => Math.round(v)], kaleido: ['copies', 0, COPIES.length - 1, 'Copies', v => COPIES[v]], tiles: ['tiles', 2, 6, 'Tiles', v => v] };
 export const P2 = { kaleido: ['spiral', 0, 1, 'Spiral', v => Math.round(v * 100), false], tiles: ['turns', 0, TURNS.length - 1, 'Turns', v => TURNS[v], true] };
 P2.free = P2.kaleido;
+// Each world caps how far the pattern knobs go (see worlds/index.js)
+const capped = (mode, key, r) => {
+  const L = world().limits;
+  return key === 'copies' ? [r[0], Math.min(r[1], L.copies)] : key === 'tiles' ? [r[0], Math.min(r[1], L.tiles)] : key === 'turns' ? [r[0], Math.min(r[1], L.turns)] : r;
+};
 export const pm = () => score.mode;
 export let pk1, pk2;
 // The four sound knobs, the two level knobs, and the two pattern knobs
@@ -84,14 +90,14 @@ export function initKnobs() {
     fmt: v => Math.round(v), color: () => '#ece8dc',
   });
   pk1 = knob($('pk1'), {
-    range: () => P1[pm()].slice(1, 3), int: true, px: () => pm() === 'kaleido' ? 140 : pm() === 'free' ? 220 : 90, def: () => pm() === 'free' ? 50 : null,
+    range: () => capped(pm(), P1[pm()][0], P1[pm()].slice(1, 3)), int: true, px: () => pm() === 'kaleido' ? 140 : pm() === 'free' ? 220 : 90, def: () => pm() === 'free' ? 50 : null,
     get: () => score[P1[pm()][0]],
     set: v => { score[P1[pm()][0]] = v; redrawSoon(); },
     fmt: v => P1[pm()][4](v),
     color: () => PALETTE[ui.color], onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
   });
   pk2 = knob($('pk2'), {
-    range: () => P2[pm()].slice(1, 3), int: () => P2[pm()][5], px: () => pm() === 'kaleido' ? 160 : 90, def: () => pm() === 'kaleido' ? 0 : null,
+    range: () => capped(pm(), P2[pm()][0], P2[pm()].slice(1, 3)), int: () => P2[pm()][5], px: () => pm() === 'kaleido' ? 160 : 90, def: () => pm() === 'kaleido' ? 0 : null,
     get: () => score[P2[pm()][0]],
     set: v => { score[P2[pm()][0]] = P2[pm()][5] ? v : Math.round(v * 100) / 100; redrawSoon(); },
     fmt: v => P2[pm()][4](v),

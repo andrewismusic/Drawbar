@@ -4,16 +4,17 @@ import { page, preview } from '../core/clips.js';
 import { $ } from '../core/dom.js';
 import { cur, eraseAt, erasing, unrot } from '../core/input.js';
 import { relayout } from '../core/layout.js';
-import { SQ3, TAU, clamp, mod } from '../core/math.js';
+import { SQ3, TAU, clamp, hash32, mod } from '../core/math.js';
 import { anim, rebuild, stepRandomize } from '../core/settings.js';
 import { score } from '../core/state.js';
 import { BEAD_R, NEON_W } from '../core/stroke.js';
 import { TOOL } from '../core/tools.js';
 import { beatAt, rotAt, scrollAt, visNow } from '../core/transport.js';
 import { composeRot, drawShape, setComposeRot } from './ops.js';
-import { buildShape, capsAlong, centerPath } from './shapes.js';
+import { buildShape, capsAlong, centerPath, geoChain } from './shapes.js';
 import { ARR } from '../sound/arranger.js';
 import { MATS } from '../styles/index.js';
+import { world } from '../worlds/index.js';
 
 export const cv = $('cv'), ctx = cv.getContext('2d');
 export const fb = document.createElement('canvas'), fctx = fb.getContext('2d');
@@ -29,6 +30,10 @@ export function resizeCanvas(w, h, wide) {
   const Rcss = wide ? Math.hypot(w, h) / 2 : w * 0.49;
   let dpr = Math.min(window.devicePixelRatio || 1, 2) * quality;
   if (2.12 * Rcss * dpr > 2300) dpr = 2300 / (2.12 * Rcss);
+  // Pixel world: one canvas pixel per few screen pixels, scaled up crisp by CSS
+  const px = world().render.pixel;
+  if (px) dpr = 1 / px;
+  cv.classList.toggle('pixel', !!px);
   cv.classList.toggle('wide', wide);
   geo.W = cv.width = Math.round(w * dpr); geo.H = cv.height = Math.round(h * dpr);
   geo.R = Rcss * dpr; geo.Rcss = Rcss; geo.wide = wide;
@@ -164,6 +169,12 @@ export function renderGroups(rot = 0) {
   groupsDirty = false;
   renderMs = performance.now() - t0;
 }
+// The shape of a moving stroke for this frame (round capsules, or polygons for geometric materials)
+function animBody(M, xs, ys, w, i1, sz) {
+  const w0 = NEON_W * sz;
+  if (M.geo) return buildShape([], geoChain(xs, ys, w, 0, i1, M.geo), M.ks, w0 * 0.9, (M.ink || 0) * w0);
+  return buildShape(capsAlong(xs, ys, w, 0, i1, 3), [], M.ks, NEON_W * sz * 0.9, M.comic ? 0.26 * NEON_W * sz : 0);
+}
 export function drawAnim(X, s, S, B) {
   const M = MATS[s.color], n = s.pts.length;
   if (s.tool === 'loop') {
@@ -171,7 +182,7 @@ export function drawAnim(X, s, S, B) {
     let iT = 0;
     while (iT < n - 1 && s.pts[iT + 1][2] <= T) iT++;
     if (iT < 1) return null;
-    const body = buildShape(capsAlong(s._xs, s._ys, s._w, 0, iT, 3), [], M.ks, NEON_W * s._sz * 0.9, M.comic ? 0.26 * NEON_W * s._sz : 0);
+    const body = animBody(M, s._xs, s._ys, s._w, iT, s._sz);
     forCopies(X, () => drawShape(X, body, M.animOps), s);
     return centerPath(s._xs, s._ys, 0, iT, 4);
   }
@@ -181,7 +192,7 @@ export function drawAnim(X, s, S, B) {
     const u = L[i] / Math.max(s._len, 1e-4), off = amp * s._amp[i] * Math.sin(Math.PI * u) * Math.sin(TAU * (u * s._waves - s._rate * S));
     rx[i] = s._xs[i] + s._nx[i] * off; ry[i] = s._ys[i] + s._ny[i] * off;
   }
-  const body = buildShape(capsAlong(rx, ry, s._w, 0, n - 1, 3), [], M.ks, NEON_W * s._sz * 0.9, M.comic ? 0.26 * NEON_W * s._sz : 0);
+  const body = animBody(M, rx, ry, s._w, n - 1, s._sz);
   forCopies(X, () => drawShape(X, body, M.animOps), s);
   return centerPath(rx, ry, 0, n - 1, 4);
 }
@@ -304,6 +315,7 @@ export function frame(now) {
     ctx.drawImage(fb, -F / 2, -F / 2);
   }
   ctx.restore();
+  if (world().render.glitch && !reduceMotion.matches) glitchPass(now);
   setNorm(ctx);
   if (!geo.wide) { ctx.strokeStyle = '#262b3e'; ctx.lineWidth = 0.004; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.stroke(); }
   if (erasing) {
@@ -312,4 +324,17 @@ export function frame(now) {
     ctx.shadowColor = 'rgba(236,232,220,0.8)'; ctx.shadowBlur = 10; ctx.strokeStyle = 'rgba(236,232,220,0.85)'; ctx.lineWidth = 0.005; ctx.stroke(); ctx.restore();
   }
   if (preview && page === 'clips') { const nc = $('nowCv'), nx = nc.getContext('2d'); nx.clearRect(0, 0, 128, 128); const s = Math.min(W, H); nx.drawImage(cv, (W - s) / 2, (H - s) / 2, s, s, 0, 0, 128, 128); }
+}
+// Glitch world: a few horizontal slices of the finished frame shifted sideways. Mostly quiet, with short bursts.
+// Visual only, driven by the frame clock (not seeded): it never touches the music. A handful of image copies per frame.
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+function glitchPass(now) {
+  const W = geo.W, H = geo.H, tick = Math.floor(now / 90), h = hash32(tick, 77), burst = hash32(Math.floor(now / 1600), 5) % 5 === 0;
+  const n = burst ? 2 + (h & 3) : (h & 15) === 0 ? 1 : 0;
+  if (!n) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  for (let i = 0; i < n; i++) {
+    const r = hash32(tick, i, 9), y = Math.floor((r % 1000) / 1000 * H), bh = Math.max(2, Math.floor(((r >>> 10) % 100) / 100 * H * 0.07)), dx = Math.round((((r >>> 17) % 200) / 100 - 1) * W * 0.05);
+    ctx.drawImage(cv, 0, y, W, bh, dx, y, W, bh);
+  }
 }

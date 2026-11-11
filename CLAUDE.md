@@ -11,7 +11,8 @@ The app was called Visual Score until v18; it is now **Drawbar**. This folder co
 | `index.html` | Markup only. Loads `src/app.css` and `src/main.js` (an ES module). No build step, no dependencies. |
 | `src/` | The app, as browser ES modules. See "Code map" below. |
 | `reference/ensemble-engine-v3.html` | An older, shelved sound engine (bass / chords / lead / harmony roles with a chord progression). Kept for ideas when building genre engines. Not used by the app. |
-| `tests/smoke.mjs` | Headless Playwright smoke test: draws in every mode and material, checks for page errors and page scroll at three screen sizes. |
+| `tests/smoke.mjs` | Headless Playwright smoke test: in every style tab, draws in every mode with every tool; checks for page errors, page scroll and overlap at three screen sizes. |
+| `tests/perf.mjs` | Frame time and redraw time for every style tab at its heaviest allowed settings, plus the pairings the tabs avoid. |
 | `tests/equiv.mjs` | Equivalence check for refactors: same seeded strokes into two builds, compares `arrange()` output and canvas pixels (3 maps x 6 pattern settings). |
 
 ## Running it
@@ -20,6 +21,10 @@ The app was called Visual Score until v18; it is now **Drawbar**. This folder co
 - Sound starts on the first touch or click anywhere (browser autoplay rules).
 - Tests need Playwright (`npm i -D playwright` once, or link an existing install into `node_modules`). With the page served on port 3000: `node tests/smoke.mjs`.
 - To prove a refactor changes nothing, serve the previous build on another port and run `node tests/equiv.mjs <oldUrl> <newUrl>`. The last single-file version (v18) is commit `73ca3f1` (`git show 73ca3f1:index.html`).
+
+### Publishing to claude.ai
+
+The app is published to the v18 artifact link (https://claude.ai/artifact/Hx9TcTZnsncB5bP2baHAVF) as a multi-file artifact: `node tools/artifact-page.mjs <out.html>` writes the page without its own `<html>`/`<head>` wrapper (the artifact host adds it), and every file under `src/` is published beside it at the same path. The artifact keeps its `db`, `user` and `downloads` capabilities, so clips and export work there.
 
 ### claude.ai-only features
 
@@ -73,7 +78,8 @@ State that more than one module changes lives with one owner and is changed thro
 | `render/ops.js` | The drawing op language (see below), `localLight`, `drawShape` |
 | `render/shapes.js` | Capsules, `buildShape`, drips, comic puffs, `extraPieces` (slime bubbles, vine leaves and flowers) |
 | `render/compose.js` | Canvases, compose canvas `fb`, cached static groups (`pool`), hidden-stroke test, glow, re-lighting with cross-fade, auto quality, `frame()` |
-| `styles/realistic.js`, `styles/comic.js` | One file per material family: op lists and material entries. `styles/index.js` assembles `MATS` (swatch order) and derived fields |
+| `styles/realistic.js`, `comic.js`, `pixel.js`, `geometric.js`, `glitch.js`, `graffiti.js` | One file per material family: op lists and material entries. `styles/index.js` assembles `MATS` and derived fields. New materials are only appended (strokes store an index) |
+| `worlds/*.js` | One file per style tab: materials, tools, modes, knob limits, start settings, render options. `worlds/index.js` lists them |
 | `sound/vocab.js` | Scales, instrument pools per tool, effects list, `MODT` modulation targets |
 | `sound/maps.js` | `makeMap(n)`: seeded per-map choices (effects, mixing matrix `W`, mod targets, drum kit and params, tone curves, instruments, free-rotation response `rot`) |
 | `sound/arranger.js` | `arrange()`: strokes into lanes of note events, drums (Euclidean), loops, drones, modulation slots, note budget (`select`) |
@@ -82,7 +88,6 @@ State that more than one module changes lives with one owner and is changed thro
 | `sound/instruments.js`, `sound/drones.js` | `voice()` (piano, pluck, wave = stroke wavetable, bell, glass, wood, pad), `drumHit()` (hand / acoustic / electro / lofi); drones from ripple strokes |
 | `sound/scheduler.js` | `schedule()` every 25 ms with 120 ms lookahead; Density = Euclidean thinning, Probability = seeded hash; free-mode rotation reshapes pitch, pan, rhythm and two effect sends |
 
-There is no `src/worlds/` yet; it arrives with roadmap step 2.
 
 ### Materials: the drawing op language
 
@@ -100,7 +105,7 @@ Every material is a list of ops run by `drawShape(ctx, shape, ops)`. A shape hol
 
 **Lighting:** one light, up-left on screen. `localLight(ctx)` converts it into the current copy's space, so mirrored and turned copies are all lit from the same side. While the picture rotates, still strokes are re-lit a slice per frame and cross-faded (`stepRelight`).
 
-Current materials: Liquid metal, Strawberry, Lemon, Mint, Blueberry (realistic, soft shading); Comic red/yellow/blue, Comic cloud, Ink hatch, Drip magenta, Drip violet (comic); Cloud, Slime (realistic); Flower vine (comic).
+Materials (in `MATS` order): Liquid metal, Strawberry, Lemon, Mint, Blueberry (realistic, soft shading); Comic red/yellow/blue, Comic cloud, Ink hatch, Drip magenta, Drip violet (comic); Cloud, Slime (realistic); Flower vine (comic); then the new Pixel ×6, Geometric ×5, Glitch ×5 and Graffiti ×5. `HDROP` is a hard drop shadow; `PAT('scan')` draws scan lines; a stroke's material colour enters the music through a fixed 15-step hue (`HUE_STEPS` in arranger.js), so adding materials never changes the music of an existing drawing.
 
 ### Shapes
 
@@ -152,29 +157,62 @@ src/worlds/    one file per world (art style + canvas defaults + genre engine)
 
 Behaviour must be identical after the split. Use the smoke test plus side-by-side screenshots, and a seeded audio check (same drawing + map produces the same event list from `arrange()`).
 
-**Done:** buildless ES modules, layout as above. Checked with `tests/smoke.mjs` (passes at all three sizes) and `tests/equiv.mjs` against v18: identical `arrange()` output and identical canvas pixels for 16 strokes (every material, all four tools) across 3 maps x 6 pattern settings. Visible changes: the name (Drawbar, in the title and top bar), export file names (`drawbar-417.mp4`), and the page must now be served rather than opened from disk.
+**Done:** buildless ES modules, layout as above. Checked with `tests/smoke.mjs` (passes at all three sizes) and `tests/equiv.mjs` against v18: identical `arrange()` output and identical canvas pixels for 15 strokes (every v18 material, all four tools) across 3 maps x 6 pattern settings. Visible changes: the name (Drawbar, in the title and top bar), export file names (`drawbar-417.mp4`), and the page must now be served rather than opened from disk.
 
-### 2. "Worlds": one app, art styles paired with genres
+### 2. "Worlds": one app, art styles paired with genres (first round done)
 
 The owner wants one app where drawing styles and canvas modes are paired with, and optimised for, music genres.
 
-**Genres wanted:** trap, hip-hop, IDM, EDM, acid, house, lofi, funk, G-funk, electro, experimental soundscape, classical (romantic), classical (impressionist), jazz.
+**Built (round 1): style tabs.** One tab per world, each with its own drawing, undo, sound knobs, tool and material (kept while you visit other tabs). All share the current sound engine for now. The aim of this round: find which brush × pattern × animation combinations run without lag, and never pair the heaviest things. A clip remembers its tab (`score.world`); clips from before the tabs open in Classic. The last tab used is remembered (`prefs.world`).
 
-**New art styles wanted** (CPU, lightest first): pixel art (very light: draw small, upscale crisp), geometric (light), glitch (steady per-frame screen effects; cheap if done with image slices), graffiti (heaviest: spray, drips, outlines; keep to low-copy canvases).
+| Tab | Materials | Tools | Patterns (limits) | Why |
+|---|---|---|---|---|
+| Classic | the 15 v18 materials | all | all, no limits | v18 unchanged (checked with `tests/equiv.mjs`); old clips |
+| Materials | metal, creams, Cloud, Slime | Brush, Beads | free (turning), kaleido up to 6 | soft shading is the costliest per copy, and the kaleidoscope re-lights all the time: few copies, nothing moving |
+| Comic | comic red/yellow/blue, comic cloud, ink hatch, flower vine | Brush, Beads | kaleido up to 8, tiles up to 4 | still comic strokes are cheap; moving ones rebuild halftone and ink every frame |
+| Pixel | 6 pixel colours (new) | all | kaleido up to 16, tiles (all), free (turning) | drawn at 1/4 resolution and scaled up crisp: the headroom goes on copies and moving strokes |
+| Geometric | Triangles, Squares, Hexagons, Diamonds, Shards (new) | Brush, Beads, Loop | kaleido up to 21, tiles (all) | flat polygon facets, cheap |
+| Glitch | Neon blue/pink, Acid, Static, Error red (new) | all | free (turning), tiles up to 4 with up to 4 turns | per-frame slice effect on screen, so no kaleidoscope |
+| Graffiti | 5 sprays and Chrome (new), plus the two drips | Brush, Beads | free (no turning), tiles up to 3 with 1–2 turns | spray halo + marker outline + drips is the heaviest style: no kaleidoscope, no re-lighting, nothing moving |
 
-**Draft pairings** (not final; confirm with the owner):
+**Measured** (`tests/perf.mjs`, headless Chromium drawing on the CPU, 12 strokes, heaviest allowed settings; compare rows, not absolute numbers). Frame time is what you feel as smoothness; redraw is the pause after each new stroke and is noisy run to run (v18's default ranged 66–124 ms).
 
-| World | Genres | Canvas |
+| Case | Redraw ms | Frame ms (median / 90th pct) |
 |---|---|---|
-| Pixel | lofi, house, electro, EDM | high-copy kaleido / tiles |
-| Geometric | IDM, acid, electro, EDM | tiles / kaleido |
-| Glitch | IDM, experimental, trap | free / tiles |
-| Graffiti | hip-hop, trap, funk, G-funk | free / low tiles |
-| Materials (current) | classical romantic + impressionist, jazz, soundscape, lofi | free / moderate kaleido |
+| Classic: v18 default, kaleido 6 with loops and ripples | 66–124 | 50 / 100–117 |
+| Materials kaleido 6 | 85–181 | 17 / 83 |
+| Comic kaleido 8 / tiles 4 with 6 turns | 114–121 / 148–208 | 17 / 17 |
+| Pixel kaleido 16 / tiles 6 with 6 turns, with loops and ripples | 32 / 33 | 33 / 50 |
+| Geometric kaleido 21 / tiles 6 with 6 turns, with loops | 74–85 / 49–53 | 17–33 / 33–100 |
+| Glitch free turning / tiles 4 | 4 / 21 | 17 / 17–33 |
+| Graffiti free / tiles 3 | 13 / 30 | 17 / 17 |
+| Avoided: Materials kaleido 21 | 183–237 | up to 117 / 150 |
+| Avoided: Comic with loops, kaleido 16 | 87–99 | 67–83 / 167–183 |
+| Avoided: Pixel with loops, kaleido 55 | 107–110 | 100 / 133–150 |
+| Avoided: Graffiti kaleido 16 | 205 | 17 / 133 |
+
+What drives cost: still strokes cost a one-off redraw that grows with copies × strokes (and ×4 per soft layer); moving strokes (Loop, Ripple) cost every frame, growing with moving strokes × copies; Comic's moving strokes are especially costly because the halftone pattern is rebuilt per copy per frame (an optimisation target if Comic should get loops back). The tabs are set from these numbers; they still need checking on the owner's devices.
+
+**New art styles** (all flat or nearly flat, so all are light except Graffiti):
+- **Pixel** (`render.pixel: 4`): the canvas is drawn at a quarter of CSS resolution and scaled up with `image-rendering: pixelated`; materials are three hard bands and a hard drop shadow. Edges are still anti-aliased at the low resolution, so pixels are soft-edged blocks.
+- **Geometric**: `M.geo` builds strokes from polygons (`geoChain`, `addPoly` in render/shapes.js) instead of capsules; beads become polygons that turn bead to bead; moving strokes too.
+- **Glitch**: cyan/magenta colour split and scan lines in the op list; `render.glitch` shifts a few horizontal slices of the finished frame (driven by the frame clock, visual only; off with reduced motion).
+- **Graffiti**: an overspray halo (`S` at k 1.9), a fat wobbly marker outline (`inkW`), drips, a hard highlight.
+
+**Still to do for worlds:** genre sound engines (see below), confirm pairings with the owner, decide whether maps are per world. Draft genre pairings, as each world file notes:
+
+| World | Genres |
+|---|---|
+| Pixel | lofi, house, electro, EDM |
+| Geometric | IDM, acid, electro, EDM |
+| Glitch | IDM, experimental, trap |
+| Graffiti | hip-hop, trap, funk, G-funk |
+| Materials | classical romantic + impressionist, jazz, soundscape |
+| Comic | funk, hip-hop, lofi |
 
 The current sound engine (melodic lines, soft sparse drums, rich effects) is the basis for the ambient/classical/soundscape side. Genre engines will need real bass, chords and groove; see `reference/ensemble-engine-v3.html`. The map system should stay (1,000 maps per world, or maps spanning worlds; to be decided).
 
-Planned later: a preference choosing between the realistic and comic material styles. For now all materials stay available for testing.
+Planned later: a preference choosing between the realistic and comic material styles.
 
 ### 3. Open items
 

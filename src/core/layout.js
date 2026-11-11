@@ -4,6 +4,7 @@ import { $ } from './dom.js';
 import { drawSizeBar } from './sizebar.js';
 import { prefs } from './state.js';
 import { resizeCanvas } from '../render/compose.js';
+import { world } from '../worlds/index.js';
 
 let lastDims = '';
 export const isVisual = () => $('app').classList.contains('visual');
@@ -23,7 +24,7 @@ export function layout() {
   else w = h = Math.min(aw, ah);
   w = Math.max(120, Math.floor(w)); h = Math.max(68, Math.floor(h));
   const st = $('stage'); st.style.width = w + 'px'; st.style.height = h + 'px';
-  const key = [w, h, wide, visual, window.devicePixelRatio].join();
+  const key = [w, h, wide, visual, window.devicePixelRatio, world().render.pixel].join();
   if (key !== lastDims) { lastDims = key; resizeCanvas(w, h, wide); }
   drawSizeBar();
 }

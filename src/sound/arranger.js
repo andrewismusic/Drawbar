@@ -7,8 +7,9 @@ import { TOOL } from '../core/tools.js';
 import { HIDDEN } from '../render/compose.js';
 import { MAP } from './maps.js';
 import { BUDGET, FX } from './vocab.js';
-import { MATS } from '../styles/index.js';
 
+// Material colour as an angle. Fixed at the 15 materials of v18, so adding materials never changes the music of a drawing.
+const HUE_STEPS = 15;
 export let ARR = null, LANES = [];
 export function rearrange() { ARR = arrange(); LANES = ARR.lanes; }
 export const metric = st => st % 16 === 0 ? 1 : st % 8 === 0 ? 0.85 : st % 4 === 0 ? 0.7 : st % 2 === 0 ? 0.45 : 0.25;
@@ -57,7 +58,7 @@ export function arrange() {
     let hs = 0, c = 0;
     for (let i = 0; i < s.pts.length; i += 3) { hs += relH(rawH(s.pts[i][0], s.pts[i][1])); c++; }
     s._hm = hs / Math.max(c, 1);
-    const hue = TAU * s.color / MATS.length;
+    const hue = TAU * s.color / HUE_STEPS;
     s._f = [s._hm, s._len / maxLen, Math.min(s._avgSp / 3, 1), Math.min(s._curv / 25, 1), Math.cos(hue), Math.sin(hue), Math.min(s._sz / 12, 1), s.tool === 'glow' ? 1 : 0, s.tool === 'beads' ? 1 : 0];
   }
   let len = 0, hsum = 0, h2 = 0, anim = 0, cc = 0, cs = 0, spd = 0;

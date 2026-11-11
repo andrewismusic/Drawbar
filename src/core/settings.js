@@ -1,9 +1,10 @@
 // Settings, undo and randomize
 // Re-read the drawing: hidden strokes, the arrangement, and the sound settings that follow from it
-import { COPIES, MODES, TURNS } from '../canvas/index.js';
+import { COPIES, TURNS } from '../canvas/index.js';
+import { endPreview, preview } from './clips.js';
 import { $ } from './dom.js';
 import { clamp, ease } from './math.js';
-import { SET_KEYS, checkpoint, prefs, score, seeId, snap } from './state.js';
+import { SET_KEYS, checkpoint, mix, prefs, redoStack, savePrefs, score, seeId, snap, ui, undoStack } from './state.js';
 import { prepare } from './stroke.js';
 import { setBpm } from './transport.js';
 import { mapInput, syncUI } from './ui.js';
@@ -12,6 +13,9 @@ import { ARR, rearrange } from '../sound/arranger.js';
 import { applyAudio, applyTempoParams } from '../sound/graph.js';
 import { MAP, applyKeyScale, useMap } from '../sound/maps.js';
 import { SCALE_DEFS } from '../sound/vocab.js';
+import { matIndex } from '../styles/index.js';
+import { WORLD, world } from '../worlds/index.js';
+import { layout } from './layout.js';
 
 export function rebuild(tc) { if (fb.width > 8) { ensureCanvases(); refreshHidden(); } rearrange(); markGroupsDirty(); applyAudio(tc); }
 export function applySettings(st, tc) {
@@ -36,20 +40,20 @@ export let anim = null;
 export function randomize() {
   if (anim) return;
   checkpoint();
-  const r = Math.random;
+  const r = Math.random, w = world(), L = w.limits;
   let map = Math.floor(r() * 1000);
   if (map === score.map) map = (map + 1 + Math.floor(r() * 998)) % 1000;
   const target = {
     map, timing: score.timing, inst: score.inst,
     tempo: prefs.rTempo ? 56 + Math.floor(r() * 76) : score.tempo,
     key: Math.floor(r() * 12), scale: Math.floor(r() * SCALE_DEFS.length),
-    mode: prefs.rMode ? MODES[Math.floor(r() * MODES.length)].id : score.mode,
-    copies: prefs.rFolds ? Math.floor(Math.pow(r(), 1.6) * COPIES.length) : score.copies,
+    mode: prefs.rMode ? w.modes[Math.floor(r() * w.modes.length)] : score.mode,
+    copies: prefs.rFolds ? Math.floor(Math.pow(r(), 1.6) * (L.copies + 1)) : score.copies,
     spiral: prefs.rFolds ? (r() < 0.5 ? 0 : Math.round(r() * 100) / 100) : score.spiral,
-    tiles: prefs.rFolds ? 2 + Math.floor(r() * 5) : score.tiles,
-    turns: prefs.rFolds ? Math.floor(r() * TURNS.length) : score.turns,
+    tiles: prefs.rFolds ? 2 + Math.floor(r() * (L.tiles - 1)) : score.tiles,
+    turns: prefs.rFolds ? Math.floor(r() * (L.turns + 1)) : score.turns,
     mirror: prefs.rFolds ? r() < 0.6 : score.mirror,
-    frot: prefs.rFolds ? r() < 0.4 : score.frot, fmirror: prefs.rFolds ? r() < 0.35 : score.fmirror,
+    frot: prefs.rFolds ? r() < 0.4 && L.rotate : score.frot, fmirror: prefs.rFolds ? r() < 0.35 : score.fmirror,
   };
   const d = $('dice'); d.classList.remove('roll'); void d.offsetWidth; d.classList.add('roll');
   // The pattern itself changes straight away; the sound glides into the new map
@@ -86,4 +90,24 @@ export function setTempo(v, silent) {
   if (v === score.tempo) return;
   score.tempo = v; setBpm(v);
   if (ARR) applyTempoParams(silent ? 0.1 : 0.25);
+}
+// Tabs: each world keeps its own drawing, sound knobs, undo history, tool and material while you are away from it.
+// A world you have not visited yet starts empty, from its own pattern settings, keeping the current map, key, tempo and timing.
+const worldStash = {};
+export function switchWorld(id) {
+  if (id === score.world || !WORLD[id] || anim) return;
+  if (preview) endPreview();
+  worldStash[score.world] = { snap: snap(), mix: { ...mix }, undo: undoStack.splice(0), redo: redoStack.splice(0), tool: ui.tool, color: ui.color };
+  const w = WORLD[id], st = worldStash[id];
+  if (st) {
+    undoStack.push(...st.undo); redoStack.push(...st.redo);
+    ui.tool = st.tool; ui.color = st.color; Object.assign(mix, st.mix);
+    restore(st.snap);
+  } else {
+    const { tool, color, ...set } = w.start;
+    ui.tool = tool; ui.color = matIndex(color);
+    restore({ set: { ...snap().set, ...set, world: id }, strokes: [] });
+  }
+  prefs.world = id; savePrefs();
+  layout();   // the Pixel world draws at its own resolution
 }

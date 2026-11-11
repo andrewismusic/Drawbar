@@ -10,6 +10,8 @@ import { initControls, applyView, syncUI } from './core/ui.js';
 import { layout } from './core/layout.js';
 import { playing, lastEnd, setLastEnd, sessionNow } from './core/transport.js';
 import { rearrange } from './sound/arranger.js';
+import { switchWorld } from './core/settings.js';
+import { prefs, score } from './core/state.js';
 import { schedule } from './sound/scheduler.js';
 import { frame } from './render/compose.js';
 
@@ -26,6 +28,8 @@ rearrange();
   const ro = new ResizeObserver(() => { if (!pend) pend = requestAnimationFrame(() => { pend = 0; layout(); }); });
   for (const id of ['main', 'panel', 'knobRow', 'sizeBar']) ro.observe($(id));
 }
+// Reopen the style tab used last time
+if (prefs.world && prefs.world !== score.world) switchWorld(prefs.world);
 applyView();
 layout();
 syncUI();

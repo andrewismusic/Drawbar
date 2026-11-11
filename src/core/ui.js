@@ -11,6 +11,8 @@ import { checkpoint, prefs, redoStack, savePrefs, score, snap, ui, undoStack } f
 import { TOOLS } from './tools.js';
 import { paused, playing, setPaused, startAudio } from './transport.js';
 import { MATS, PALETTE } from '../styles/index.js';
+import { switchWorld } from './settings.js';
+import { WORLDS, world } from '../worlds/index.js';
 
 export const mapInput = $('mapInput');
 export const change = fn => { checkpoint(); fn(); rebuild(); syncUI(); };
@@ -38,7 +40,17 @@ export function syncSound() {
   $('playBtn').setAttribute('aria-label', on ? 'Stop' : 'Play');
 }
 export function syncUI() {
-  const m = score.mode, free = m === 'free';
+  const m = score.mode, free = m === 'free', w = world(), L = w.limits;
+  // Only what this world offers is shown
+  if (!w.tools.includes(ui.tool)) ui.tool = w.tools[0];
+  if (!w.matIdx.includes(ui.color)) ui.color = w.matIdx[0];
+  for (const x of WORLDS) { const b = $('world-' + x.id); b.setAttribute('aria-selected', String(x === w)); b.tabIndex = x === w ? 0 : -1; }
+  const strip = $('worldTabs'), sel = $('world-' + w.id);
+  if (sel.offsetLeft < strip.scrollLeft || sel.offsetLeft + sel.offsetWidth > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = sel.offsetLeft - 8;
+  for (const md of MODES) $('mode-' + md.id).hidden = !w.modes.includes(md.id);
+  for (const t of TOOLS) $('tool-' + t.id).hidden = !w.tools.includes(t.id);
+  MATS.forEach((M, i) => { const b = $('sw-' + i); b.hidden = !w.matIdx.includes(i); b.style.order = w.matIdx.indexOf(i); });
+  $('pk2w').hidden = free && !L.rotate;
   for (const md of MODES) $('mode-' + md.id).setAttribute('aria-pressed', String(m === md.id));
   $('modeName').textContent = MODES.find(md => md.id === m).name;
   for (const v of ['tones', 'both', 'drums']) $('inst-' + v).setAttribute('aria-pressed', String(score.inst === v));
@@ -63,6 +75,19 @@ export function syncUI() {
 }
 // All the buttons, the tempo box, the map number and preferences
 export function initControls() {
+  // Style tabs: one per world
+  WORLDS.forEach(w => {
+    const b = document.createElement('button');
+    b.id = 'world-' + w.id; b.setAttribute('role', 'tab'); b.textContent = w.name;
+    b.addEventListener('click', () => switchWorld(w.id));
+    $('worldTabs').appendChild(b);
+  });
+  $('worldTabs').addEventListener('keydown', e => {
+    const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    if (!d) return;
+    const i = WORLDS.findIndex(w => w.id === score.world), next = WORLDS[(i + d + WORLDS.length) % WORLDS.length];
+    switchWorld(next.id); $('world-' + next.id).focus(); e.preventDefault();
+  });
   TOOLS.forEach(t => {
     const b = document.createElement('button');
     b.className = 'tool'; b.id = 'tool-' + t.id;
