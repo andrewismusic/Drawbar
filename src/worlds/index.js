@@ -13,7 +13,9 @@ import geometric from './geometric.js';
 import glitch from './glitch.js';
 import graffiti from './graffiti.js';
 
-export const WORLDS = [classic, materials, comic, garden, geometric, glitch, graffiti];
+export const WORLDS = [materials, comic, garden, geometric, glitch, graffiti, classic];
+// The tabs on offer (Classic is legacy: see worlds/classic.js)
+export const TABS = WORLDS.filter(w => !w.legacy);
 export const WORLD = Object.fromEntries(WORLDS.map(w => [w.id, w]));
 for (const w of WORLDS) w.matIdx = w.mats.map(matIndex);
 export const world = () => WORLD[score.world] || classic;

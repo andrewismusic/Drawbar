@@ -1,6 +1,7 @@
-// Classic: v18 exactly as it was. Every original material, tool and pattern, no limits. Old clips open here.
+// Classic: retired as a tab in v22. Kept only so clips saved before the style tabs (or in Classic) still open:
+// its tab shows only while such a clip is open. Every original material, tool and pattern, no limits.
 export default {
-  id: 'classic', name: 'Classic',
+  id: 'classic', name: 'Classic', legacy: true,
   mats: ['Liquid metal', 'Strawberry', 'Lemon', 'Mint', 'Blueberry', 'Comic red', 'Comic yellow', 'Comic blue', 'Comic cloud', 'Ink hatch',
     'Drip magenta', 'Drip violet', 'Cloud', 'Slime', 'Flower vine'],
   tools: ['glow', 'beads', 'loop', 'ripple', 'erase'],

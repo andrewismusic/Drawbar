@@ -11,7 +11,7 @@ for (const [name, width, height] of sizes) {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(url); await page.waitForTimeout(600);
-  const tabs = await page.locator('#worldTabs button').evaluateAll(bs => bs.map(b => b.id.slice(6)));
+  const tabs = await page.locator('#worldTabs button:visible').evaluateAll(bs => bs.map(b => b.id.slice(6)));
   const results = [];
   for (const tab of tabs) {
     await page.click('#world-' + tab); await page.waitForTimeout(150);

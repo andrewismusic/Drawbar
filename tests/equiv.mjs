@@ -43,6 +43,7 @@ async function run(url) {
           const m = await Promise.all(['core/state.js', 'core/stroke.js', 'core/settings.js', 'sound/arranger.js', 'sound/maps.js'].map(p => import('/src/' + p)));
           G = { score: m[0].score, prepare: m[1].prepare, applySettings: m[2].applySettings, arrange: m[3].arrange, get MAP() { return m[4].MAP; } };
         } else G = { score, prepare, applySettings, arrange, get MAP() { return MAP; } };
+        if (isNew) (await import('/src/core/settings.js')).switchWorld('classic');   // the legacy world: every v18 material, re-lit as in v18
         G.score.strokes = strokes.map(s => { s = { ...s, pts: s.pts.map(p => p.slice()) }; G.prepare(s); return s; });
         G.applySettings({ ...G.score, ...st, map, key: 2, scale: 2, tempo: 92, timing: 'clocked', inst: 'both' });
         const A = G.arrange();

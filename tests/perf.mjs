@@ -10,7 +10,6 @@ const url = process.argv[2] || 'http://localhost:3000/';
 
 const CASES = [
   // world, label, settings (the heaviest each world allows), avoided?, tools (default: all the world's tools)
-  ['classic', 'v18 default: kaleido 6, all tools', { mode: 'kaleido', copies: 4, mirror: true }],
   ['materials', 'free, turning, mirror', { mode: 'free', frot: true, fmirror: true }],
   ['materials', 'tiles 4, 2 turns, mirror', { mode: 'tiles', tiles: 4, turns: 1, mirror: true }],
   ['comic', 'kaleido 8, mirror', { mode: 'kaleido', copies: 6, mirror: true }],
@@ -22,8 +21,11 @@ const CASES = [
   ['geometric', 'kaleido 55, mirror', { mode: 'kaleido', copies: 14, mirror: true }],
   ['geometric', 'kaleido 55, mirror, pixel', { mode: 'kaleido', copies: 14, mirror: true, pixel: true }],
   ['geometric', 'tiles 6, 6 turns, mirror', { mode: 'tiles', tiles: 6, turns: 4, mirror: true }],
-  ['glitch', 'free, mirror', { mode: 'free', fmirror: true }],
-  ['glitch', 'tiles 4, 2 turns, mirror', { mode: 'tiles', tiles: 4, turns: 1, mirror: true }],
+  ['glitch', 'free, mirror, smear', { mode: 'free', fmirror: true, fx: 'smear' }],
+  ['glitch', 'free, mirror, blocks', { mode: 'free', fmirror: true, fx: 'blocks' }],
+  ['glitch', 'free, mirror, HUD', { mode: 'free', fmirror: true, fx: 'hud' }],
+  ['glitch', 'tiles 4, 2 turns, smear', { mode: 'tiles', tiles: 4, turns: 1, mirror: true, fx: 'smear' }],
+  ['glitch', 'tiles 4, 2 turns, HUD', { mode: 'tiles', tiles: 4, turns: 1, mirror: true, fx: 'hud' }],
   ['graffiti', 'free, mirror', { mode: 'free', fmirror: true }],
   ['graffiti', 'tiles 3, 2 turns, mirror', { mode: 'tiles', tiles: 3, turns: 1, mirror: true }],
   // Pairings the worlds avoid

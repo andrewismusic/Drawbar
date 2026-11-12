@@ -78,10 +78,11 @@ State that more than one module changes lives with one owner and is changed thro
 | `render/ops.js` | The drawing op language (see below), `localLight`, `drawShape` |
 | `render/shapes.js` | Capsules, `buildShape`, drips, comic puffs, `extraPieces` (slime bubbles, vine leaves and flowers) |
 | `render/stamps.js` | Geometric stamps: outline points per shape (`stampPts`) and the filled shape (`stampShape`) |
+| `render/glitchfx.js`, `sound/pulse.js` | Glitch effects (smear, blocks, HUD) and the note pulses they react to |
 | `render/glyphs.js` | Glitch code: grid cells along a mark (`glyphCells`), glyph sheets per colour, `drawGlyphs` |
 | `render/plants.js` | Garden: plant generators along a line or at bead points (`growPlant`) |
 | `render/compose.js` | Canvases, compose canvas `fb`, cached static groups (`pool`), hidden-stroke test, glow, re-lighting with cross-fade, auto quality, `frame()` |
-| `styles/realistic.js`, `comic.js`, `graffiti.js`, `flat.js`, `code.js`, `garden.js` | One file per material family: op lists and material entries. `styles/index.js` assembles `MATS` and derived fields (including `M.lit`). New materials are only appended (strokes store an index). `retired.js`: v19's pixel, facet and neon materials, offered by no tab, kept so their drawings still open |
+| `styles/realistic.js`, `comic.js`, `graffiti.js`, `flat.js`, `code.js`, `garden.js`, `signal.js` | One file per material family: op lists and material entries. `styles/index.js` assembles `MATS` and derived fields (including `M.lit`). New materials are only appended (strokes store an index). `retired.js`: v19's pixel, facet and neon materials, offered by no tab, kept so their drawings still open |
 | `worlds/*.js` | One file per style tab: materials, tools, modes, knob limits, start settings, render options. `worlds/index.js` lists them |
 | `sound/vocab.js` | Scales, instrument pools per tool, effects list, `MODT` modulation targets |
 | `sound/maps.js` | `makeMap(n)`: seeded per-map choices (effects, mixing matrix `W`, mod targets, drum kit and params, tone curves, instruments, free-rotation response `rot`) |
@@ -108,7 +109,7 @@ Every material is a list of ops run by `drawShape(ctx, shape, ops)`. A shape hol
 
 **Lighting:** one light, up-left on screen. `localLight(ctx)` converts it into the current copy's space, so mirrored and turned copies are all lit from the same side. While the picture rotates, still strokes are re-lit a slice per frame and cross-faded (`stepRelight`).
 
-Materials (in `MATS` order): Liquid metal, Strawberry, Lemon, Mint, Blueberry (realistic, soft shading); Comic red/yellow/blue, Comic cloud, Ink hatch, Drip magenta, Drip violet (comic); Cloud, Slime (realistic); Flower vine (flat since v20); then retired v19 Pixel ×6, facets ×5, neon ×5; Graffiti ×5; Flat ×8 (Geometric); Code ×5 (Glitch); plants ×9 (Garden). `HDROP` is a hard drop shadow; `PAT('scan')` draws scan lines; a stroke's material colour enters the music through a fixed 15-step hue (`HUE_STEPS` in arranger.js), so adding materials never changes the music of an existing drawing.
+Materials (in `MATS` order): Liquid metal, Strawberry, Lemon, Mint, Blueberry (realistic, soft shading); Comic red/yellow/blue, Comic cloud, Ink hatch, Drip magenta, Drip violet (comic); Cloud, Slime (realistic); Flower vine (flat since v20); then retired v19 Pixel ×6, facets ×5, neon ×5; Graffiti ×5; Flat ×8 (Geometric); Code ×5 (Glitch); plants ×9 (Garden); Signal ×5 (Glitch). `HDROP` is a hard drop shadow; `PAT('scan')` draws scan lines; a stroke's material colour enters the music through a fixed 15-step hue (`HUE_STEPS` in arranger.js), so adding materials never changes the music of an existing drawing.
 
 ### Shapes
 
@@ -140,7 +141,7 @@ Tiles is cheaper than kaleidoscope: it draws one repeating cell and fills the vi
 - Re-lighting stops each frame on a cost budget (500) or after 6 ms.
 - Undo, clear, clip load and knob turns still redraw everything at once (`rebuild`).
 - Garden: Beads blooms are thinned (`beadEvery`), since a line of bead sunflowers was 38 ms per redraw.
-- Classic keeps v18's soft materials in the kaleidoscope, so it still has long frames from re-lighting (up to ~80 ms in the test); the other tabs had none over 34 ms.
+- No tab had a frame over 34 ms in the test (the retired Classic world still re-lights soft materials in the kaleidoscope).
 
 **Biggest remaining win (not built):** render each still stroke once into a sprite at 8–16 pre-lit angles, then stamp copies with `drawImage`. Copies become nearly free; lighting is very slightly approximate; costs memory.
 
@@ -180,13 +181,14 @@ A tab you are not looking at costs nothing: leaving a tab drops its cached layer
 
 | Tab | Materials | Tools | Patterns (limits) | Why |
 |---|---|---|---|---|
-| Classic | the 15 v18 materials | all | all, no limits | v18 unchanged (checked with `tests/equiv.mjs`; only the flower vine's look changed in v20); old clips |
 | Materials | metal, creams, Cloud, Slime | Brush, Beads | free (turning), tiles up to 4 with 1–2 turns | soft shading is the costliest per copy; **no kaleidoscope**: it turns all the time, so every soft stroke in every copy is re-lit several times a second and the light visibly steps (the jitter seen on tablets) |
 | Comic | comic red/yellow/blue, comic cloud, ink hatch | Brush, Beads | free (turning), kaleido up to 8, tiles up to 4 with up to 4 turns | light is fixed to the picture (no re-lighting); moving comic strokes rebuild halftone and ink every frame, so none |
 | Garden | Flower vine and 9 plant brushes | Brush, Beads | free (turning), kaleido up to 8, tiles up to 4 | many small flat pieces, unlit: costs a redraw per stroke, never re-lights |
 | Geometric | 8 flat colours | 5 stamps (circle, square, triangle, hexagon, star) | free (turning), kaleido up to 55, all tiles; Pixel option | one flat fill per shape per copy, unlit: the lightest style |
-| Glitch | 5 code colours | all | free (no turning), tiles up to 4 with 1–2 turns | glyphs on a fixed grid; grid stays square to the screen |
+| Glitch | 5 signal colours, 5 code colours | all | free (no turning), tiles up to 4 with 1–2 turns; Effect: Smear / Blocks / HUD | fixed-cost screen effects that pulse with the notes |
 | Graffiti | 5 sprays and Chrome, plus the two drips | Brush, Beads | free (no turning), tiles up to 3 with 1–2 turns | spray halo + marker outline + drips is the heaviest style: no kaleidoscope, no re-lighting, nothing moving |
+
+**Classic is retired as a tab** (v22): every v18 material and pattern now lives in another tab (Loop and Ripple are only in Glitch for now). `worlds/classic.js` stays as a legacy world (`legacy: true`): its tab appears only while an old clip saved in it is open, and `tests/equiv.mjs` switches to it to compare the sound engine with v18. The app starts in Comic (or the last tab used).
 
 **Lighting and CPU.** Materials are lit from one light, up-left on screen. When the picture turns (kaleidoscope always; free mode with Rotate), still strokes must be redrawn so the light stays put: `stepRelight` redraws them all in every copy, a slice per frame, whenever the picture has turned 0.1 radian (several times a second), then cross-fades. That is a constant background redraw, about 4× dearer per soft layer. So:
 - `M.lit` (styles/index.js) marks materials whose look depends on the light (a layer slid toward it, or a drop shadow). Flat (Geometric), code (Glitch) and garden materials are not lit: if nothing on screen is lit, turning never re-lights; the cached layers just turn.
@@ -198,12 +200,12 @@ A tab you are not looking at costs nothing: leaving a tab drops its cached layer
 
 | Case | Redraw ms | Frame ms (median / 90th pct) | Re-lighting |
 |---|---|---|---|
-| Classic: v18 default, kaleido 6 with loops and ripples | 65 | 50 / 117 | 78% |
+| (retired) Classic: v18 default, kaleido 6 with loops and ripples | 65 | 50 / 117 | 78% |
 | Materials free, turning / tiles 4 with 2 turns | 21 / 50 | 17 / 17 | 55% / 0% |
 | Comic kaleido 8 / tiles 4 with 4 turns / 3 turns (hex) | 167 / 86 / 165 | 17 / 17 | 0% |
 | Garden free turning / kaleido 8 / tiles 4 with 6 turns | 17 / 134 / 131 | 17 / 17 | 0% |
 | Geometric kaleido 55 (also with Pixel) / tiles 6 with 6 turns | 15 / 4 | 17 / 17 | 0% |
-| Glitch free / tiles 4 with 2 turns (with loops and ripples) | 3 / 7 | 17 / 17–33 | 0% |
+| Glitch free / tiles 4, each effect (with loops and ripples) | 3 / 6 | 17 / 17–33 (Smear), 17 / 17 (Blocks, HUD) | 0% |
 | Graffiti free / tiles 3 | 20 / 46 | 17 / 17 | 0% |
 | Avoided: Materials kaleido 6 | 134 | 17 / 83 | 60% |
 | Avoided: Materials kaleido 21 | 387 | 50 / 150 | 90% |
@@ -215,7 +217,12 @@ What drives cost: still strokes cost a one-off redraw that grows with copies × 
 
 **Styles:**
 - **Geometric**: stamps, not brushes. Tap to stamp at the size bar's size, or press and drag to set size and turn (the first corner points at the finger). A stamp is stored as a stroke whose points trace its outline once (`stampPts`), so clips, undo and the music need nothing new; the arranger hears a closed line with corners, played with the Beads instrument (`TOOL.voice`). The eraser removes a stamp whole. **Pixel** (`score.pixel`, a toggle after the colours, saved with clips) draws the canvas at a quarter resolution and scales it up with `image-rendering: pixelated`; edges are anti-aliased at that resolution, so blocks are slightly soft.
-- **Glitch**: marks become cells on a fixed grid (`GCELL`, in the drawing's own space) showing seeded glyphs (katakana, digits, symbols) from a pre-drawn sheet per colour, over a faint panel tint; a moving stroke's newest cells are bright; a faint grid shows in free mode; `render.glitch` shifts a few slices of the frame in short bursts (visual only, off with reduced motion). Mirrored copies show mirrored glyphs.
+- **Glitch effects** (v22, `render/glitchfx.js`, chosen with the Effect buttons, `score.fx`, saved with clips). Each costs about the same per frame however much is drawn, and reacts a little to the music: the scheduler records each note (`sound/pulse.js`, `notePulse`), the frame reads a decaying energy (`pulseEnergy`). One-way: nothing feeds back into the music. With reduced motion only HUD runs.
+  - **Smear**: the marks alone are drawn half-size into a buffer that fades and drags bands of rows sideways each frame; its trails are laid back tinted red and cyan a few pixels apart, under scan lines. Notes widen the drag and the colour split.
+  - **Blocks** (datamosh): pieces and whole bands of the marks slip, stretch into streaks, repeat, turn to mosaic and ghost in flipped colours, holding for a few ticks; drum hits add pieces and tear rows.
+  - **HUD**: marks dim; each mark's key points become white nodes on a thin line with a ring at its start, neighbouring marks are linked, under turning arcs, rim ticks, a sweep, a scan line and ticking read-outs. Notes swell the nodes and arcs.
+  - Signal materials (`styles/signal.js`): flat neon with a white core.
+- **Glitch code brushes**: marks become cells on a fixed grid (`GCELL`, in the drawing's own space) showing seeded glyphs (katakana, digits, symbols) from a pre-drawn sheet per colour, over a faint panel tint; a moving stroke's newest cells are bright; a faint grid shows in free mode. Mirrored copies show mirrored glyphs.
 - **Garden**: each plant brush grows keyed pieces along the line (daisies, tulips, lavender, fern, grass, berries, blossom, clover, sunflower, and the flower vine); Beads makes one bloom or clump per bead. "Up" is the side of the line facing the top of the drawing. Plants' pieces are joined in `paths.all` for the hidden-stroke test.
 - **Graffiti**: an overspray halo (`S` at k 1.9), a fat wobbly marker outline (`inkW`), drips, a hard highlight.
 - **Flower vine** lost its black outlines (and its comic ink) in v20 and moved from Comic to Garden.
@@ -242,7 +249,6 @@ Planned later: a preference choosing between the realistic and comic material st
 - **Drum levels:** drive curves were just loudness-compensated (v18) and the kick is quieter. This hasn't been checked by ear yet, so confirm with the owner.
 - **Phone layout:** the top bar takes two rows.
 - **Sound knobs:** Density, Probability, Space and Tone sit in an outlined group with a speaker icon and a "Sound" label (v21), to show they change the music only.
-- **Glitch:** the owner wants more dynamic visuals (references: scan-line smears with colour fringing, datamosh blocks, pixel sorting, sci-fi HUD). Directions proposed in chat, awaiting the owner's pick.
 - **Material ideas the owner liked but cut for now:** a twisting ribbon (flat strip, silver reverse, flips driven by line curvature) and popcorn.
 - **Concept-doc ideas not built:** fractal mode, harmonograph, flow field, growth, phyllotaxis, girih, drift mode, share codes.
 

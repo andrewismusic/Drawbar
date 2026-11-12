@@ -4,7 +4,7 @@ import { page, preview } from '../core/clips.js';
 import { $ } from '../core/dom.js';
 import { cur, eraseAt, erasing, unrot } from '../core/input.js';
 import { relayout } from '../core/layout.js';
-import { SQ3, TAU, clamp, hash32, mod } from '../core/math.js';
+import { SQ3, TAU, clamp, mod } from '../core/math.js';
 import { anim, hiddenChanged, rebuild, stepRandomize } from '../core/settings.js';
 import { score } from '../core/state.js';
 import { BEAD_R, NEON_W } from '../core/stroke.js';
@@ -17,6 +17,8 @@ import { MATS } from '../styles/index.js';
 import { pixelScale, world } from '../worlds/index.js';
 import { GCELL, glyphCells, glyphShape, lineSamples } from './glyphs.js';
 import { stampPts, stampShape } from './stamps.js';
+import { blocksPass, hudOverlay, hudWires, marksTarget, releaseFx, smearPass } from './glitchfx.js';
+import { pulseEnergy } from '../sound/pulse.js';
 
 export const cv = $('cv'), ctx = cv.getContext('2d');
 export const fb = document.createElement('canvas'), fctx = fb.getContext('2d');
@@ -177,7 +179,7 @@ function trimPool(list, used) {
 }
 // Leaving a tab: drop its cached layers and any re-lighting in progress, and let the next tab measure its own speed
 export function releaseCanvases() {
-  trimPool(pool, 0); trimPool(poolB, 0);
+  trimPool(pool, 0); trimPool(poolB, 0); releaseFx();
   ITEMS = []; relight = null; fade = null; groupsDirty = true;
   if (quality !== 1) { quality = 1; relayout(); }
   slowFor = fastFor = 0; frameEma = 16;
@@ -365,11 +367,13 @@ export function frame(now) {
   fctx.setTransform(1, 0, 0, 1, 0, 0); fctx.clearRect(0, 0, fb.width, fb.height);
   gctx.setTransform(1, 0, 0, 1, 0, 0); gctx.clearRect(0, 0, glowC.width, glowC.height); gctx.drawImage(glowS, 0, 0);
   const fa = fade ? clamp((now - fade.t0) / 160, 0, 1) : 1;
+  const fx = fxMode(), energy = fx ? pulseEnergy(S) : null, dim = fx === 'hud' ? 0.3 : 1;   // HUD: marks dimmed under their wires
   for (let j = 0; j < ITEMS.length; j++) {
     const it = ITEMS[j];
     if (it.canvas) {
       fctx.setTransform(1, 0, 0, 1, 0, 0);
-      if (fade && fade.old[j] && fade.old[j].canvas) { fctx.drawImage(fade.old[j].canvas, 0, 0); fctx.globalAlpha = fa; }
+      fctx.globalAlpha = dim;
+      if (fade && fade.old[j] && fade.old[j].canvas) { fctx.drawImage(fade.old[j].canvas, 0, 0); fctx.globalAlpha = fa * dim; }
       fctx.drawImage(it.canvas, 0, 0); fctx.globalAlpha = 1;
       continue;
     }
@@ -384,6 +388,7 @@ export function frame(now) {
     gctx.globalAlpha = 1;
   }
   frameNorm(fctx, fb);
+  if (fx === 'hud') { hudWires(fctx, score.strokes, HIDDEN, energy); frameNorm(fctx, fb); }
   drawPreview(fctx);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
   setNorm(ctx);
@@ -394,25 +399,12 @@ export function frame(now) {
   drawGuides(B, rot);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (cd) {
-    const sc = scrollAt(B);
-    const fillPat = (img, alpha, op) => {
-      const pat = ctx.createPattern(img, 'repeat');
-      pat.setTransform(new DOMMatrix([geo.R * cd[0] / img.width, 0, 0, geo.R * cd[1] / img.height, W / 2, H / 2 - sc * geo.R]));
-      ctx.globalAlpha = alpha; ctx.globalCompositeOperation = op; ctx.fillStyle = pat; ctx.fillRect(0, 0, W, H);
-    };
-    fillPat(glowC, 0.32, 'lighter'); fillPat(fb, 1, 'source-over');
-    ctx.globalAlpha = 1;
-  } else {
-    ctx.translate(W / 2, H / 2); ctx.rotate(rot);
-    const F = fb.width;
-    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.32;
-    ctx.drawImage(glowC, -F / 2, -F / 2, F, F);
-    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-    ctx.drawImage(fb, -F / 2, -F / 2);
-  }
+  blitPicture(ctx, W, H, B, rot, cd, true);
+  // Glitch effects work on the finished picture, still clipped to the drawing
+  if (fx === 'smear') { blitPicture(marksTarget(W, H), W, H, B, rot, cd, false); smearPass(ctx, W, H, now, energy); }
+  else if (fx === 'blocks') { blitPicture(marksTarget(W, H), W, H, B, rot, cd, false); blocksPass(ctx, cv, W, H, now, energy); }
+  else if (fx === 'hud') hudOverlay(ctx, W, H, geo.R, now, energy);
   ctx.restore();
-  if (world().render.glitch && !reduceMotion.matches) glitchPass(now);
   setNorm(ctx);
   if (!geo.wide) { ctx.strokeStyle = '#262b3e'; ctx.lineWidth = 0.004; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.stroke(); }
   if (erasing) {
@@ -422,16 +414,33 @@ export function frame(now) {
   }
   if (preview && page === 'clips') { const nc = $('nowCv'), nx = nc.getContext('2d'); nx.clearRect(0, 0, 128, 128); const s = Math.min(W, H); nx.drawImage(cv, (W - s) / 2, (H - s) / 2, s, s, 0, 0, 128, 128); }
 }
-// Glitch world: a few horizontal slices of the finished frame shifted sideways. Mostly quiet, with short bursts.
-// Visual only, driven by the frame clock (not seeded): it never touches the music. A handful of image copies per frame.
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-function glitchPass(now) {
-  const W = geo.W, H = geo.H, tick = Math.floor(now / 90), h = hash32(tick, 77), burst = hash32(Math.floor(now / 1600), 5) % 5 === 0;
-  const n = burst ? 2 + (h & 3) : (h & 15) === 0 ? 1 : 0;
-  if (!n) return;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  for (let i = 0; i < n; i++) {
-    const r = hash32(tick, i, 9), y = Math.floor((r % 1000) / 1000 * H), bh = Math.max(2, Math.floor(((r >>> 10) % 100) / 100 * H * 0.07)), dx = Math.round((((r >>> 17) % 200) / 100 - 1) * W * 0.05);
-    ctx.drawImage(cv, 0, y, W, bh, dx, y, W, bh);
+// The Glitch effect in use, if this tab has them. With reduced motion only the HUD (which barely moves) is kept.
+function fxMode() {
+  const w = world();
+  if (!(w.options && w.options.fx)) return null;
+  return reduceMotion.matches && score.fx !== 'hud' ? null : score.fx;
+}
+// Put the composed picture (and its glow) on a screen-sized context: turned for free and kaleidoscope, tiled and
+// scrolled for tiles. c's transform is kept as the base (identity for the screen, a scale for smaller targets).
+function blitPicture(c, W, H, B, rot, cd, glow) {
+  if (cd) {
+    const sc = scrollAt(B);
+    const fillPat = (img, alpha, op) => {
+      const pat = c.createPattern(img, 'repeat');
+      pat.setTransform(new DOMMatrix([geo.R * cd[0] / img.width, 0, 0, geo.R * cd[1] / img.height, W / 2, H / 2 - sc * geo.R]));
+      c.globalAlpha = alpha; c.globalCompositeOperation = op; c.fillStyle = pat; c.fillRect(0, 0, W, H);
+    };
+    if (glow) fillPat(glowC, 0.32, 'lighter');
+    fillPat(fb, 1, 'source-over');
+    c.globalAlpha = 1;
+  } else {
+    c.save();
+    c.translate(W / 2, H / 2); c.rotate(rot);
+    const F = fb.width;
+    if (glow) { c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.32; c.drawImage(glowC, -F / 2, -F / 2, F, F); }
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    c.drawImage(fb, -F / 2, -F / 2);
+    c.restore();
   }
 }

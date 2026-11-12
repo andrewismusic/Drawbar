@@ -12,7 +12,7 @@ import { TOOL, TOOLS } from './tools.js';
 import { paused, playing, setPaused, startAudio } from './transport.js';
 import { MATS, PALETTE } from '../styles/index.js';
 import { switchWorld } from './settings.js';
-import { WORLDS, world } from '../worlds/index.js';
+import { TABS, WORLDS, world } from '../worlds/index.js';
 
 export const mapInput = $('mapInput');
 export const change = fn => { checkpoint(); fn(); rebuild(); syncUI(); };
@@ -44,7 +44,9 @@ export function syncUI() {
   // Only what this world offers is shown
   if (!w.tools.includes(ui.tool)) ui.tool = w.tools[0];
   if (!w.matIdx.includes(ui.color)) ui.color = w.matIdx[0];
-  for (const x of WORLDS) { const b = $('world-' + x.id); b.setAttribute('aria-selected', String(x === w)); b.tabIndex = x === w ? 0 : -1; }
+  for (const x of WORLDS) { const b = $('world-' + x.id); b.setAttribute('aria-selected', String(x === w)); b.tabIndex = x === w ? 0 : -1; b.hidden = !!x.legacy && x !== w; }
+  $('fxGroup').hidden = !(w.options && w.options.fx);
+  for (const b of $('fxSeg').children) b.setAttribute('aria-pressed', String(b.dataset.v === score.fx));
   const strip = $('worldTabs'), sel = $('world-' + w.id);
   if (sel.offsetLeft < strip.scrollLeft || sel.offsetLeft + sel.offsetWidth > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = sel.offsetLeft - 8;
   for (const md of MODES) $('mode-' + md.id).hidden = !w.modes.includes(md.id);
@@ -87,7 +89,7 @@ export function initControls() {
   $('worldTabs').addEventListener('keydown', e => {
     const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
     if (!d) return;
-    const i = WORLDS.findIndex(w => w.id === score.world), next = WORLDS[(i + d + WORLDS.length) % WORLDS.length];
+    const i = TABS.findIndex(w => w.id === score.world), next = TABS[(i + d + TABS.length) % TABS.length];
     switchWorld(next.id); $('world-' + next.id).focus(); e.preventDefault();
   });
   TOOLS.forEach(t => {
@@ -116,6 +118,7 @@ export function initControls() {
     $('modeSeg').appendChild(b);
   });
   $('modeSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.mode) change(() => score.mode = v); });
+  $('fxSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.fx) change(() => score.fx = v); });
   $('timeSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.timing) change(() => score.timing = v); });
   $('instSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.inst) change(() => score.inst = v); });
   $('mirrorBtn').addEventListener('click', () => change(() => { if (score.mode === 'free') score.fmirror = !score.fmirror; else score.mirror = !score.mirror; }));

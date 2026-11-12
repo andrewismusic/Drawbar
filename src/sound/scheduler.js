@@ -10,11 +10,13 @@ import { MAP } from './maps.js';
 import { N } from './nodes.js';
 import { lineNote } from './pitch.js';
 import { TOOL } from '../core/tools.js';
+import { notePulse } from './pulse.js';
 
 export function playEvent(lane, ev, S) {
   const at = S + pausedTotal - audioOffset;
   if (at < actx.currentTime - 0.02) return;
   const t = Math.max(at, actx.currentTime);
+  notePulse(S, ev.w, lane.role === 'drums');   // for visuals that react to the music
   if (lane.role === 'drums') { drumHit(ev.piece, t, ev.w, ev.open); return; }
   const pSec = lane.base === 'beat' ? lane.period * 60 / score.tempo : lane.period;
   const dur = clamp((ev.len || 0.1) * pSec, 0.08, 3);
