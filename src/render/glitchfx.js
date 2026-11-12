@@ -1,19 +1,20 @@
-// Glitch strokes. Every stroke in the Glitch tab is drawn afresh each frame (they all move), in one of two looks:
-//   wire brushes: a chain of slowly tumbling 3D wireframe solids along the line (tetrahedra to dodecahedra)
-//   code brushes: glyph cells on a grid whose characters keep being replaced, each cell at its own pace
-// Each stroke carries its own effect (s.fx, the Effect button chosen when it was drawn) with its own seeded
-// settings (direction, reach, pace...), so two strokes with the same effect still behave differently:
+// Glitch strokes. Every stroke in the Glitch tab is drawn afresh each frame (they all move), in one of three looks:
+//   wire brushes:  a chain of slowly tumbling 3D wireframe solids along the line (tetrahedra to dodecahedra)
+//   nodes brush:   white points joined by thin lines, with a ring at the start
+//   code brush:    glyph cells on a grid whose characters keep being replaced, each cell at its own pace
+// The colour comes from the colour picker (s.tint). Each stroke carries its own effect (s.fx, the Effect button
+// chosen when it was drawn) with its own seeded settings (direction, reach, pace...), so two strokes with the same
+// effect still behave differently:
 //   smear:  fading copies trail off to one side, with red / cyan fringes
 //   blocks: datamosh. Pieces of the stroke slip sideways, some in flipped colour
-//   jitter: each solid or cell jumps out of place and changes size, holding for a moment, now and then by a lot
-//   hud:    the stroke dims under nodes on a thin line with a ring at its start
+//   jitter: each solid, node or cell jumps out of place and changes size, holding for a moment, now and then by a lot
 // All of it is thin lines or small image copies, in the drawing's own space (so copies and tiles just work). Each
 // stroke pulses with its own notes (pulseFrame), and drum hits nudge them all. Visual only.
 import { TAU, hash32, mulberry32, mod, clamp } from '../core/math.js';
 import { score } from '../core/state.js';
-import { animEventIdx, NEON_W } from '../core/stroke.js';
+import { NEON_W } from '../core/stroke.js';
 import { forCopies } from '../canvas/index.js';
-import { MATS } from '../styles/index.js';
+import { MATS, colorOf } from '../styles/index.js';
 import { GCELL, glyphCells, lineSamples, sheet, SZ, COLS, NGLYPH, LEVELS } from './glyphs.js';
 
 const frac = r => (r % 10000) / 10000;
@@ -41,9 +42,9 @@ const SOLIDS = {
 // Per-stroke set-up, once: the effect's seeded settings, and where the solids sit along the line
 function setup(s) {
   const M = MATS[s.color], r = mulberry32(hash32(s.id, 911)), n = s.pts.length, L = s._L;
-  const g = { fx: s.fx || 'smear', dir: r() < 0.5 ? -1 : 1, reach: 0.5 + r(), split: 0.5 + r(), rate: 0.5 + 1.5 * r(), hold: 2 + Math.floor(r() * 5), amt: 0.5 + r(), seed: hash32(s.id, 77) };
-  if (M.wire) {
-    const base = NEON_W * s._sz * (s.tool === 'beads' ? 1.6 : 2.8), gap = Math.max(base * 2.3, s._len / 9);   // at most about 9 solids a stroke
+  const g = { fx: s.fx === 'blocks' || s.fx === 'jitter' ? s.fx : 'smear', dir: r() < 0.5 ? -1 : 1, reach: 0.5 + r(), split: 0.5 + r(), rate: 0.5 + 1.5 * r(), hold: 2 + Math.floor(r() * 5), amt: 0.5 + r(), seed: hash32(s.id, 77) };
+  if (M.wire || M.nodes) {
+    const base = NEON_W * s._sz * (s.tool === 'beads' ? 1.6 : 2.8) * (M.nodes ? 0.5 : 1), gap = Math.max(base * 2.3, s._len / (M.nodes ? 16 : 9));   // at most about 9 solids (16 nodes) a stroke
     g.els = []; g.lw = clamp(base * 0.085, 0.0022, 0.006);
     let next = 0;
     for (let i = 0; i < n; i++) {
@@ -88,6 +89,25 @@ function wirePath(s, g, S, T, slot, e) {
   }
   return P;
 }
+// This frame's nodes: where they sit (after sway and jitter), the line through them with a few cross-links and a ring
+function nodesPath(s, g, S, T, slot, e) {
+  const P = new Path2D(), N = [];
+  for (const el of g.els) {
+    if (el.t > T) continue;
+    const off = sway(s, el.i, S);
+    let x = el.x + s._nx[el.i] * off, y = el.y + s._ny[el.i] * off;
+    if (g.fx === 'jitter') {
+      const h = hash32(g.seed, el.i, Math.floor(slot / (1 + (el.i + g.hold) % 4))), big = h % 6 === 0, k = g.amt * (1 + e) * el.R;
+      x += (frac(h) - 0.5) * (big ? 9 : 2.4) * k; y += (frac(h >>> 8) - 0.5) * (big ? 7 : 2) * k;
+    }
+    N.push([x, y]);
+  }
+  if (!N.length) return { P, N };
+  P.moveTo(N[0][0], N[0][1]); for (let i = 1; i < N.length; i++) P.lineTo(N[i][0], N[i][1]);
+  for (let i = 0; i + 2 < N.length; i += 3) { P.moveTo(N[i][0], N[i][1]); P.lineTo(N[i + 2][0], N[i + 2][1]); }
+  const R = g.els[0].R * 2.2; P.moveTo(N[0][0] + R, N[0][1]); P.arc(N[0][0], N[0][1], R, 0, TAU);
+  return { P, N };
+}
 // This frame's glyph cells (static strokes keep theirs; loops and ripples re-read the grid as they move)
 function liveCells(s, S, T) {
   if (s.tool === 'glow' || s.tool === 'beads') return s._shape.cells;
@@ -120,15 +140,24 @@ function drawCells(X, cells, g, color, S, slot, e, dx, dy, alpha) {
 }
 const FLIP = ['#00e5ff', '#ff2bd6', '#fff35c', '#ffffff'];
 // Draw one live stroke. X: the frame buffer's context, in drawing space. P: { drum, by } from pulseFrame.
-// Returns true if the stroke uses the HUD effect (so the screen can add its rings and read-outs).
 export function drawLive(X, s, S, B, now, P) {
   const M = MATS[s.color], g = s._gl || setup(s), e = Math.min((P.by.get(s.id) || 0) + 0.5 * P.drum, 1.5);
-  const slot = Math.floor(now / 170), T = reveal(s, S, B), c = M.accent, tiles = score.mode === 'tiles';
+  const slot = Math.floor(now / 170), T = reveal(s, S, B), c = colorOf(s), tiles = score.mode === 'tiles';
   let pass;
   if (M.wire) {
     const path = wirePath(s, g, S, T, slot, e);
     X.lineWidth = g.lw; X.lineJoin = 'bevel'; X.lineCap = 'butt';   // plain line ends: the cheapest to draw
     pass = (dx, dy, a, col, op) => { X.globalAlpha = a; X.globalCompositeOperation = op || 'source-over'; X.strokeStyle = col || c; X.translate(dx, dy); X.stroke(path); X.translate(-dx, -dy); };
+  } else if (M.nodes) {
+    const { P: path, N } = nodesPath(s, g, S, T, slot, e), nr = g.els[0].R * 0.55 * (1 + 0.8 * Math.min(e, 1.2));
+    X.lineWidth = g.lw; X.lineJoin = 'bevel'; X.lineCap = 'butt';
+    // The main pass (full strength, in the stroke's own colour) gets white points; copies get theirs in the copy's colour
+    pass = (dx, dy, a, col) => {
+      X.globalAlpha = a; X.strokeStyle = col || c; X.translate(dx, dy); X.stroke(path);
+      X.fillStyle = a === 1 && (!col || col === c) ? '#ffffff' : col || c;
+      for (const q of N) X.fillRect(q[0] - nr, q[1] - nr, nr * 2, nr * 2);
+      X.translate(-dx, -dy);
+    };
   } else {
     const cells = liveCells(s, S, T);
     pass = (dx, dy, a, col, op) => { X.globalCompositeOperation = op || 'source-over'; drawCells(X, cells, g, col || c, S, slot, e, dx, dy, a); };
@@ -152,47 +181,9 @@ export function drawLive(X, s, S, B, now, P) {
         X.restore();
         if (h % 5 === 0) { X.globalAlpha = 0.2; X.fillStyle = c; X.fillRect(rx + dx, ry, rw, rh * 0.35); }
       }
-    } else if (g.fx === 'jitter') {
-      pass(0.004 * g.dir, 0.002, 0.45, '#00e0ff'); pass(0, 0, 1, c);
     } else {
-      pass(0, 0, 0.4, c);
-      const N = (s._hud || (s._hud = animEventIdx(s).map(i => [s.pts[i][0], s.pts[i][1], s.pts[i][2]]))).filter(q => q[2] <= T), nr = 0.007 * (1 + 0.9 * Math.min(e, 1.2));
-      if (N.length) {
-        X.globalCompositeOperation = 'source-over'; X.strokeStyle = c; X.lineWidth = 0.004; X.globalAlpha = 0.95;
-        X.beginPath(); X.moveTo(N[0][0], N[0][1]); for (let i = 1; i < N.length; i++) X.lineTo(N[i][0], N[i][1]); X.stroke();
-        X.lineWidth = 0.003; X.globalAlpha = 0.7; X.beginPath(); X.arc(N[0][0], N[0][1], 0.03, 0, TAU); X.stroke();
-        X.globalAlpha = 1; X.fillStyle = '#ffffff';
-        for (const q of N) X.fillRect(q[0] - nr, q[1] - nr, nr * 2, nr * 2);
-      }
+      pass(0.004 * g.dir, 0.002, 0.45, '#00e0ff'); pass(0, 0, 1, c);
     }
     X.globalAlpha = 1; X.globalCompositeOperation = 'source-over';
   }, { _bb: g.bb });
-  return g.fx === 'hud';
-}
-// HUD dressing on screen, shown while any stroke uses the HUD effect: rings with turning arcs, rim ticks, a sweep,
-// a scan line and read-outs
-export function hudOverlay(ctx, W, H, R, now, drum) {
-  const cx = W / 2, cy = H / 2, t = now / 1000, glow = 0.3 + 0.35 * Math.min(drum, 1), u = R / 300;
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.strokeStyle = '#35e6ff'; ctx.fillStyle = '#35e6ff'; ctx.lineWidth = Math.max(1, u);
-  ctx.globalAlpha = 0.16;
-  for (const k of [0.34, 0.62, 0.9]) { ctx.beginPath(); ctx.arc(cx, cy, R * k, 0, TAU); ctx.stroke(); }
-  ctx.globalAlpha = glow; ctx.lineWidth = Math.max(1.5, 2.2 * u);
-  [[0.34, 0.5, 1.1], [0.62, -0.31, 0.7], [0.62, -0.31 + 2.4, 0.4], [0.9, 0.17, 0.5], [0.9, 0.17 + 3.3, 0.9]].forEach(([k, sp, len]) => { ctx.beginPath(); ctx.arc(cx, cy, R * k, t * sp, t * sp + len); ctx.stroke(); });
-  ctx.globalAlpha = 0.3; ctx.lineWidth = Math.max(1, u); ctx.beginPath();
-  for (let i = 0; i < 72; i++) { const a = TAU * i / 72, r0 = R * (i % 6 ? 0.965 : 0.94); ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); ctx.lineTo(cx + Math.cos(a) * R * 0.985, cy + Math.sin(a) * R * 0.985); }
-  ctx.stroke();
-  const sa = t * 0.9;
-  ctx.globalAlpha = 0.07; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R * 0.9, sa - 0.5, sa); ctx.closePath(); ctx.fill();
-  ctx.globalAlpha = 0.4; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(sa) * R * 0.9, cy + Math.sin(sa) * R * 0.9); ctx.stroke();
-  const sy = cy - R + ((t * 0.11) % 1) * 2 * R;
-  ctx.globalAlpha = 0.14; ctx.fillRect(cx - R, sy, 2 * R, Math.max(1, 1.5 * u));
-  ctx.globalAlpha = 0.55; ctx.font = `${Math.round(9 * u + 3)}px ui-monospace, Menlo, Consolas, monospace`; ctx.textBaseline = 'middle';
-  const tick = Math.floor(now / 380);
-  [[-0.66, -0.6], [0.42, -0.66], [-0.7, 0.58], [0.4, 0.64]].forEach(([px, py], i) => {
-    const r = hash32(tick + i * 3, i, 23);
-    ctx.fillText(String(r % 100000).padStart(5, '0') + ' ' + (r >>> 20).toString(16).toUpperCase(), cx + px * R, cy + py * R);
-    ctx.fillRect(cx + px * R, cy + py * R + 8 * u, 26 * u * (0.3 + 0.7 * frac(r >>> 3)), Math.max(1, 1.5 * u));
-  });
-  ctx.globalAlpha = 1;
 }

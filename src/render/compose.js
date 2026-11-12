@@ -13,11 +13,11 @@ import { beatAt, rotAt, scrollAt, visNow } from '../core/transport.js';
 import { composeRot, drawShape, setComposeRot } from './ops.js';
 import { buildShape, capsAlong, centerPath, geoChain } from './shapes.js';
 import { ARR } from '../sound/arranger.js';
-import { MATS } from '../styles/index.js';
+import { MATS, colorOf, opsOf } from '../styles/index.js';
 import { pixelScale, world } from '../worlds/index.js';
 import { GCELL, glyphCells, glyphShape, lineSamples } from './glyphs.js';
 import { stampPts, stampShape } from './stamps.js';
-import { drawLive, hudOverlay } from './glitchfx.js';
+import { drawLive } from './glitchfx.js';
 import { pulseFrame } from '../sound/pulse.js';
 import { drawSpaceBg, drawTwinkles } from './space.js';
 
@@ -67,7 +67,7 @@ export function frameNorm(c, can) {
 export const setNorm = c => c.setTransform(geo.R, 0, 0, geo.R, geo.W / 2, geo.H / 2);
 export const bloomW = s => 0.016 + 0.022 * Math.sqrt(s._sz);
 export function drawUnit(c, u) {
-  drawShape(c, u.shape, MATS[u.color].ops);
+  drawShape(c, u.shape, opsOf(u.list[0]));
 }
 // Still: drawn once into a cached layer. Moving tools (Loop, Ripple) and live materials (Glitch) are drawn every frame.
 const isStill = s => TOOL[s.tool].kind === 'static' && !MATS[s.color].live;
@@ -206,7 +206,7 @@ export function appendStroke(s) {
   const saved = composeRot;
   setComposeRot(litRot);
   frameNorm(top.x, top.canvas);
-  forCopies(top.x, () => drawShape(top.x, s._shape, M.ops), s);
+  forCopies(top.x, () => drawShape(top.x, s._shape, opsOf(s)), s);
   setComposeRot(saved);
   if (M.glowA) {
     frameNorm(gsctx, glowS); gsctx.lineCap = 'round'; gsctx.lineJoin = 'round'; gsctx.shadowBlur = 4;
@@ -284,7 +284,7 @@ export function drawPreview(X) {
   if (cur && cur.stamp) {
     // A stamp being placed: the real shape, a little see-through, in every copy
     const sh = stampShape(cur.stamp, stampPts(cur.stamp, cur.cx, cur.cy, cur.r, cur.rot)), r = cur.r + 0.03;
-    X.fillStyle = MATS[cur.color].accent; X.globalAlpha = 0.8;
+    X.fillStyle = colorOf(cur); X.globalAlpha = 0.8;
     forCopies(X, () => X.fill(sh.paths[1]), { _bb: [cur.cx - r, cur.cy - r, cur.cx + r, cur.cy + r] });
     X.globalAlpha = 1;
     return;
@@ -296,8 +296,9 @@ export function drawPreview(X) {
   const bm = 0.015 * sz + 0.03; bb[0] -= bm; bb[1] -= bm; bb[2] += bm; bb[3] += bm;
   X.lineCap = 'round'; X.lineJoin = 'round';
   forCopies(X, () => {
-    if (cur.tool === 'beads') { X.lineWidth = BEAD_R * 4 * sz; X.strokeStyle = M.accent; X.stroke(path); }
-    else { X.lineWidth = NEON_W * 2 * sz; X.strokeStyle = M.accent; X.stroke(path); X.lineWidth = NEON_W * 0.72 * sz; X.strokeStyle = M.light; X.stroke(path); }
+    const ac = colorOf(cur);
+    if (cur.tool === 'beads') { X.lineWidth = BEAD_R * 4 * sz; X.strokeStyle = ac; X.stroke(path); }
+    else { X.lineWidth = NEON_W * 2 * sz; X.strokeStyle = ac; X.stroke(path); X.lineWidth = NEON_W * 0.72 * sz; X.strokeStyle = cur.tint ? '#ffffff' : M.light; X.stroke(path); }
   }, { _bb: bb });
 }
 export function drawGuides(B, rot) {
@@ -370,7 +371,7 @@ export function frame(now) {
   fctx.setTransform(1, 0, 0, 1, 0, 0); fctx.clearRect(0, 0, fb.width, fb.height);
   gctx.setTransform(1, 0, 0, 1, 0, 0); gctx.clearRect(0, 0, glowC.width, glowC.height); gctx.drawImage(glowS, 0, 0);
   const fa = fade ? clamp((now - fade.t0) / 160, 0, 1) : 1;
-  let pulses = null, hudAny = false;
+  let pulses = null;
   const still = reduceMotion.matches;   // reduced motion: live strokes hold still
   for (let j = 0; j < ITEMS.length; j++) {
     const it = ITEMS[j];
@@ -381,7 +382,7 @@ export function frame(now) {
       continue;
     }
     frameNorm(fctx, fb);
-    if (MATS[it.s.color].live) { pulses = pulses || pulseFrame(S); if (drawLive(fctx, it.s, still ? 0 : S, still ? 0 : B, still ? 0 : now, pulses)) hudAny = true; continue; }
+    if (MATS[it.s.color].live) { pulses = pulses || pulseFrame(S); drawLive(fctx, it.s, still ? 0 : S, still ? 0 : B, still ? 0 : now, pulses); continue; }
     const path = drawAnim(fctx, it.s, S, B);
     if (!path) continue;
     frameNorm(gctx, glowC); gctx.lineCap = 'round';
@@ -405,7 +406,6 @@ export function frame(now) {
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   blitPicture(ctx, W, H, B, rot, cd, true);
-  if (hudAny) hudOverlay(ctx, W, H, geo.R, still ? 0 : now, pulses.drum);
   ctx.restore();
   setNorm(ctx);
   if (!geo.wide) { ctx.strokeStyle = '#262b3e'; ctx.lineWidth = 0.004; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.stroke(); }

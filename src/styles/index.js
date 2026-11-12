@@ -11,10 +11,12 @@ import { glyphMats } from './code.js';
 import { plants } from './garden.js';
 import { signals } from './signal.js';
 import { spaceMats } from './space.js';
+import { pop } from './comic.js';
+import { nodes } from './signal.js';
 
 // New materials are only ever appended: a stroke stores its material as an index into this list (clips depend on it)
 export const MATS = [liquidMetal, ...creams, ...comics, comicCloud, inkHatch, ...drips, softCloud, slimeMat, flowerVine,
-  ...pixels, ...shapes, ...neons, ...sprays, ...flats, ...glyphMats, ...plants, ...signals, ...spaceMats];
+  ...pixels, ...shapes, ...neons, ...sprays, ...flats, ...glyphMats, ...plants, ...signals, ...spaceMats, pop, nodes];
 export const matIndex = name => { const i = MATS.findIndex(m => m.name === name); if (i < 0) throw new Error('No material ' + name); return i; };
 for (const M of MATS) { M.ops = M.make();
   // Moving strokes are redrawn every frame, so they use crisp layers instead of the costly blurred ones
@@ -23,3 +25,13 @@ for (const M of MATS) { M.ops = M.make();
   // while the picture turns; flat, glyph and garden materials just turn with the picture.
   M.lit = M.ops.some(o => o.t === 'drop' || !!o.off); }
 export const PALETTE = MATS.map(m => m.accent);
+// Tabs with separate brush and colour pickers (Comic, Glitch) store the colour on the stroke (s.tint).
+// The colour a stroke shows in, and its op list (tintable materials build one per colour, cached)
+export const colorOf = s => s.tint || MATS[s.color].accent;
+export function opsOf(s) {
+  const M = MATS[s.color];
+  if (!s.tint || !M.tintOps) return M.ops;
+  const cache = M._tints || (M._tints = new Map());
+  if (!cache.has(s.tint)) cache.set(s.tint, M.tintOps(s.tint));
+  return cache.get(s.tint);
+}

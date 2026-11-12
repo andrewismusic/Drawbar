@@ -100,9 +100,9 @@ export function prepare(s) {
     } else if (s.tool === 'glow' && M.space) {
       s._shape = spaceShape(M, s.id, { xs, ys, w, L, n, w0 });
     } else if (s.tool === 'glow' && M.plant) {
-      // Garden: a thin stem with the plant grown along it
-      s._shape = buildShape(capsAlong(xs, ys, w.map(v => v * M.stemW), 0, n - 1, 2), [], M.ks, w0 * 0.9);
-      Object.assign(s._shape.paths, growPlant(M.plant, M.keys, s.id, { xs, ys, nx, ny, w, L, n, w0 }));
+      // Garden: plants grown along the line (the line itself is not drawn)
+      const pieces = growPlant(M.plant, M.keys, s.id, { xs, ys, nx, ny, w, L, n, w0 });
+      s._shape = { paths: { ...pieces, 1: pieces.all }, w0: w0 * 0.9, wd: w0 * 0.9, ink: null };
     } else if (s.tool === 'glow') {
       let caps = capsAlong(xs, ys, w, 0, n - 1, 2), circ = [], inkCaps = null;
       if (M.extra === 'slime') {

@@ -1,7 +1,7 @@
 // Free mode: no copies. Size (fscale), Rotate (frot) and Mirror (fmirror). Rotation affects the music per map (MAP.rot).
 import { score } from '../core/state.js';
 
-// Free mode Size: 50 is as drawn, 0 shrinks everything to a tenth, 100 doubles it
+// Size (every pattern since v24): 50 is as drawn, 0 shrinks the drawing to a tenth, 100 doubles it
 export const fs = () => score.fscale < 50 ? Math.pow(0.1, (50 - score.fscale) / 50) : Math.pow(2, (score.fscale - 50) / 50);
 export function copies(c, fn) {
   const k = fs();

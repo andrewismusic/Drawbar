@@ -3,7 +3,7 @@ import { MODES, mirrored } from '../canvas/index.js';
 import { endPreview, keepClip, page, preview, showPage } from './clips.js';
 import { $ } from './dom.js';
 import { openExport } from './export.js';
-import { P1, P2, mixKnobs, pk1, pk2, pm } from './knobs.js';
+import { P1, P2, mixKnobs, pk1, pk2, pk3, pm } from './knobs.js';
 import { isVisual, layout } from './layout.js';
 import { anim, randomize, rebuild, restore, setMap, setTempo } from './settings.js';
 import { drawSizeBar } from './sizebar.js';
@@ -11,6 +11,7 @@ import { checkpoint, prefs, redoStack, savePrefs, score, snap, ui, undoStack } f
 import { TOOL, TOOLS } from './tools.js';
 import { paused, playing, setPaused, startAudio } from './transport.js';
 import { MATS, PALETTE } from '../styles/index.js';
+import { ink } from '../worlds/index.js';
 import { switchWorld } from './settings.js';
 import { TABS, WORLDS, world } from '../worlds/index.js';
 
@@ -66,15 +67,26 @@ export function syncUI() {
   $('mirrorBtn').setAttribute('aria-pressed', String(mirrored()));
   $('rotBtn').setAttribute('aria-pressed', String(score.frot));
   for (const t of TOOLS) $('tool-' + t.id).setAttribute('aria-pressed', String(ui.tool === t.id));
-  PALETTE.forEach((c, i) => $('sw-' + i).setAttribute('aria-pressed', String(ui.color === i)));
-  document.documentElement.style.setProperty('--ink', PALETTE[ui.color]);
+  // Colour picker (tabs with a palette): rebuilt when the tab changes; brush swatches are shown in the colour picked
+  const cg = $('colors');
+  $('colorGroup').hidden = !w.colors; $('matLabel').textContent = w.colors ? 'Brush' : 'Material';
+  if (w.colors) {
+    if (!w.colors.includes(ui.tint)) ui.tint = w.colors[0];
+    if (cg.dataset.world !== w.id) {
+      cg.dataset.world = w.id; cg.innerHTML = '';
+      w.colors.forEach(c => { const b = document.createElement('button'); b.className = 'sw'; b.dataset.c = c; b.style.setProperty('--c', c); b.setAttribute('aria-label', 'Color ' + c); b.addEventListener('click', () => { ui.tint = c; if (ui.tool === 'erase') ui.tool = w.tools[0]; syncUI(); }); cg.appendChild(b); });
+    }
+    for (const b of cg.children) b.setAttribute('aria-pressed', String(b.dataset.c === ui.tint));
+  }
+  MATS.forEach((M, i) => { const b = $('sw-' + i); b.setAttribute('aria-pressed', String(ui.color === i)); if (!b.hidden) { b.style.setProperty('--c', w.colors && M.swatchFor ? M.swatchFor(ui.tint) : M.swatch); b.title = M.label && w.colors ? M.label : M.name; b.setAttribute('aria-label', b.title); } });
+  document.documentElement.style.setProperty('--ink', ink());
   $('sizeLabel').textContent = ui.tool === 'erase' ? 'Eraser size' : TOOL[ui.tool].stamp ? 'Stamp size' : 'Brush size';
   if (!anim) mapInput.value = String(score.map).padStart(3, '0');
   $('bpmVal').textContent = score.tempo;
   $('undoBtn').disabled = !undoStack.length;
   $('redoBtn').disabled = !redoStack.length;
   $('clearBtn').disabled = !score.strokes.length;
-  pk1.draw(); pk2.draw(); for (const key in mixKnobs) mixKnobs[key].draw();
+  $('pk3w').hidden = free; pk1.draw(); pk2.draw(); pk3.draw(); for (const key in mixKnobs) mixKnobs[key].draw();
   drawSizeBar(); syncSound();
 }
 // All the buttons, the tempo box, the map number and preferences

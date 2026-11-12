@@ -1,5 +1,4 @@
-// Space: nebulae, stars and galaxies made from soft pre-drawn sprites stamped with additive light, the way layered
-// exposures add up in telescope photographs. A stroke is a seeded list of stamps, built once (spaceShape) and drawn
+// Space: nebulae, stars and galaxies made from soft pre-drawn sprites. Stars add light; gas is laid over like paint. A stroke is a seeded list of stamps, built once (spaceShape) and drawn
 // with one image copy per stamp. Stars twinkle through a small per-frame overlay on a few stars per stroke.
 import { TAU, mulberry32, hash32 } from '../core/math.js';
 import { hexRgb } from '../core/color.js';
@@ -15,13 +14,19 @@ const rg = (g, x, y, r, stops) => { const gr = g.createRadialGradient(x, y, 0, x
 const rgba = (hex, a) => { const [r, g, b] = hexRgb(hex); return `rgba(${r},${g},${b},${a})`; };
 // A lumpy cloud of gas: several overlapping soft lobes, so stamps never look like plain discs (3 variants per colour)
 const puff = (color, v) => make('puff' + color + v, g => {
-  const r = mulberry32(hash32(v, 51)); g.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 6; i++) { const a = r() * TAU, d = r() * SZ * 0.2, rad = SZ * (0.2 + 0.18 * r()); rg(g, SZ / 2 + Math.cos(a) * d, SZ / 2 + Math.sin(a) * d, rad, [[0, rgba(color, 0.3)], [0.5, rgba(color, 0.12)], [1, rgba(color, 0)]]); }
+  const r = mulberry32(hash32(v, 51));
+  for (let i = 0; i < 6; i++) { const a = r() * TAU, d = r() * SZ * 0.2, rad = SZ * (0.2 + 0.18 * r()); rg(g, SZ / 2 + Math.cos(a) * d, SZ / 2 + Math.sin(a) * d, rad, [[0, rgba(color, 0.34)], [0.5, rgba(color, 0.14)], [1, rgba(color, 0)]]); }
 });
 // Dark dust: soaks up the light behind it
 const dust = v => make('dust' + v, g => {
   const r = mulberry32(hash32(v, 52));
   for (let i = 0; i < 5; i++) { const a = r() * TAU, d = r() * SZ * 0.2; rg(g, SZ / 2 + Math.cos(a) * d, SZ / 2 + Math.sin(a) * d, SZ * (0.2 + 0.16 * r()), [[0, 'rgba(6,5,12,0.55)'], [0.6, 'rgba(6,5,12,0.2)'], [1, 'rgba(6,5,12,0)']]); }
+});
+// A small planet: a shaded disc, lit from the upper left
+const planet = color => make('planet' + color, g => {
+  g.beginPath(); g.arc(SZ / 2, SZ / 2, SZ * 0.42, 0, TAU); g.clip();
+  rg(g, SZ * 0.36, SZ * 0.34, SZ * 0.6, [[0, '#ffffff'], [0.18, color], [0.75, rgba(color, 0.35)], [1, 'rgba(5,5,12,1)']]);
+  g.globalAlpha = 0.25; g.fillStyle = '#000'; for (let i = 0; i < 3; i++) g.fillRect(0, SZ * (0.38 + i * 0.12), SZ, SZ * 0.035);
 });
 // A point of light
 const dot = color => make('dot' + color, g => rg(g, SZ / 2, SZ / 2, SZ / 2, [[0, '#ffffff'], [0.12, rgba(color, 0.95)], [0.4, rgba(color, 0.25)], [1, rgba(color, 0)]]));
@@ -50,24 +55,36 @@ const galaxy = (color, v) => make('gal' + color + v, g => {
 });
 
 // Build a stroke's stamps. M.space: { kind: 'nebula' | 'stars' | 'galaxy' | 'dust', a, b: colours }.
-// line: { xs, ys, w, n, w0 } or beads: [{ x, y, r }]. Stamps are [sprite, x, y, r, turn, alpha, dark?].
+// line: { xs, ys, w, L, n, w0 } or beads: [{ x, y, r }]. Stamps are [sprite, x, y, r, turn, alpha, over?].
+// Gas is laid "over" (ordinary see-through paint), so stacked clouds mix their colours but never get brighter than
+// the colours themselves; only stars add light. To keep the stroke's line from showing, the cloud wanders off the
+// line, thins and thickens along it, and its stars, wisps and the odd planet scatter far out, fainter with distance.
+const PLANETS = ['#d9a066', '#8fb7e8', '#c9785a', '#b7a6d9', '#9ad0b0'];
 export function spaceShape(M, id, line, beads) {
   const r = mulberry32(hash32(id, 808)), st = [], tw = [], K = M.space, path = new Path2D();
   const around = (x, y, d) => { const a = r() * TAU, k = d * Math.sqrt(r()); return [x + Math.cos(a) * k, y + Math.sin(a) * k]; };
-  const tiny = (x, y, R, col) => { const [px, py] = around(x, y, R), s = R * (0.03 + 0.07 * r() * r()); st.push([dot(col), px, py, s, 0, 0.5 + 0.5 * r()]); };
-  const bright = (x, y, s, col) => { st.push([star(col, r() < 0.5 ? 4 : 6), x, y, s, r() * TAU, 0.95]); tw.push([x, y, s, r() * TAU, 0.6 + 2.2 * r()]); };
+  // Far scatter: most land near, a few very far (reach = how many R out the farthest go); returns [x, y, 0..1 distance]
+  const far = (x, y, R, reach) => { const a = r() * TAU, u = Math.pow(r(), 1.7), d = R * (0.2 + reach * u); return [x + Math.cos(a) * d, y + Math.sin(a) * d, u]; };
+  const tiny = (x, y, R, col, reach = 3.4) => { const [px, py, u] = far(x, y, R, reach), s = R * (0.02 + 0.09 * r() * r()) * (1 - 0.4 * u); st.push([dot(col), px, py, s, 0, (0.2 + 0.8 * r() * r()) * (1 - 0.55 * u) + 0.1]); };
+  const bright = (x, y, s, col) => { st.push([star(col, r() < 0.5 ? 4 : 6), x, y, s, r() * TAU, 0.6 + 0.35 * r()]); tw.push([x, y, s, r() * TAU, 0.6 + 2.2 * r()]); };
+  const extras = (x, y, R) => {
+    if (r() < 0.035) { const [px, py] = far(x, y, R, 3); st.push([planet(PLANETS[Math.floor(r() * PLANETS.length)]), px, py, R * (0.05 + 0.1 * r()), r() * TAU, 0.95, true]); }
+    if (r() < 0.03) { const [px, py] = far(x, y, R, 3.5); st.push([galaxy('#a9c4ff', Math.floor(r() * 3)), px, py, R * (0.2 + 0.25 * r()), r() * TAU, 0.5 + 0.4 * r()]); }
+  };
   const knot = (x, y, R) => {
     if (K.kind === 'nebula') {
-      const [ox, oy] = around(x, y, R * 0.6); st.push([puff(K.b, st.length % 3), ox, oy, R * (1.1 + 0.7 * r()), r() * TAU, 0.3]);
-      const [mx, my] = around(x, y, R * 0.3); st.push([puff(K.a, (st.length + 1) % 3), mx, my, R * (0.6 + 0.4 * r()), r() * TAU, 0.38]);
-      if (r() < 0.3) st.push([puff('#fff4e0', 0), ...around(x, y, R * 0.3), R * 0.24, r() * TAU, 0.25]);
-      tiny(x, y, R, '#ffffff'); if (r() < 0.5) tiny(x, y, R * 1.4, K.a);
-      if (r() < 0.12) { const [sx, sy] = around(x, y, R); bright(sx, sy, R * (0.35 + 0.35 * r()), '#dfe9ff'); }
+      const [ox, oy] = around(x, y, R * 0.7); st.push([puff(K.b, st.length % 3), ox, oy, R * (0.9 + 0.9 * r()), r() * TAU, 0.35 + 0.3 * r(), true]);
+      const [mx, my] = around(x, y, R * 0.4); st.push([puff(K.a, (st.length + 1) % 3), mx, my, R * (0.45 + 0.6 * r()), r() * TAU, 0.4 + 0.4 * r(), true]);
+      if (r() < 0.3) { const [wx, wy, u] = far(x, y, R, 2.6); st.push([puff(r() < 0.5 ? K.a : K.b, st.length % 3), wx, wy, R * (0.3 + 0.5 * r()), r() * TAU, 0.3 * (1 - 0.6 * u), true]); }   // outlying wisp
+      for (let k = 0, n = Math.floor(r() * r() * 7); k < n; k++) tiny(x, y, R, r() < 0.75 ? '#ffffff' : K.a);
+      if (r() < 0.1) { const [sx, sy] = far(x, y, R, 2.5); bright(sx, sy, R * (0.18 + 0.4 * r() * r()), '#dfe9ff'); }
+      extras(x, y, R);
     } else if (K.kind === 'dust') {
       st.push([dust(st.length % 3), ...around(x, y, R * 0.4), R * (0.7 + 0.6 * r()), r() * TAU, 0.9, true]);
     } else if (K.kind === 'stars') {
-      for (let k = 0, n = 2 + Math.floor(r() * 3); k < n; k++) tiny(x, y, R * 1.6, r() < 0.7 ? K.a : K.b);
-      if (r() < 0.3) { const [sx, sy] = around(x, y, R * 1.3); bright(sx, sy, R * (0.3 + 0.6 * r() * r()), r() < 0.6 ? K.a : K.b); }
+      for (let k = 0, n = 1 + Math.floor(r() * r() * 11); k < n; k++) tiny(x, y, R, r() < 0.7 ? K.a : K.b, 4);
+      if (r() < 0.25) { const [sx, sy] = far(x, y, R, 3); bright(sx, sy, R * (0.15 + 0.7 * r() * r() * r()), r() < 0.6 ? K.a : K.b); }
+      extras(x, y, R);
     }
   };
   if (beads) {
@@ -75,30 +92,35 @@ export function spaceShape(M, id, line, beads) {
       const R = b.r * 4;
       path.moveTo(b.x + b.r, b.y); path.arc(b.x, b.y, b.r, 0, TAU);
       if (bi % 2 && beads.length > 2) continue;   // every other bead: big stamps overlap otherwise
-      if (K.kind === 'stars') { bright(b.x, b.y, R * (0.5 + 0.6 * r()), r() < 0.6 ? K.a : K.b); st.push([puff(K.a, 0), b.x, b.y, R * 0.7, 0, 0.18]); }
+      if (K.kind === 'stars') { bright(b.x, b.y, R * (0.4 + 0.8 * r() * r()), r() < 0.6 ? K.a : K.b); for (let k = 0; k < 3; k++) tiny(b.x, b.y, R, K.a, 2.5); }
       else if (K.kind === 'galaxy') st.push([galaxy(K.a, st.length % 3), b.x, b.y, R * (0.8 + 0.4 * r()), r() * TAU, 1]);
       else knot(b.x, b.y, R * 0.8);
     }
   } else {
     const { xs, ys, w, L, n, w0 } = line, R0 = w0 * 4.5;
+    // The cloud's centre line wanders either side of the drawn line, and its density swells and thins
+    const p1 = r() * TAU, p2 = r() * TAU, p3 = r() * TAU, f1 = 1 / (R0 * (2.5 + 2 * r())), f2 = 1 / (R0 * (0.9 + 0.8 * r())), f3 = 1 / (R0 * (3 + 3 * r()));
     let gap = 0, next = 0;
     for (let i = 0; i < n; i++) {
       path.moveTo(xs[i] + w[i], ys[i]); path.arc(xs[i], ys[i], Math.max(w[i], 1e-4), 0, TAU);
-      // One knot of stamps every third of a cloud's radius, so exposure stays even whatever the drawing speed
+      // One knot of stamps every third of a cloud's radius, so the cloud stays even whatever the drawing speed
       if (L[i] < next && i < n - 1) continue;
-      const R = R0 * (0.5 + 0.5 * w[i] / (w0 * 1.35) + 0.2);
+      const R = R0 * (0.5 + 0.5 * w[i] / (w0 * 1.35) + 0.2) * (0.7 + 0.6 * r());
       next = L[i] + R * 0.34;
+      const a = Math.max(i - 1, 0), b = Math.min(i + 1, n - 1), dx = xs[b] - xs[a], dy = ys[b] - ys[a], d = Math.hypot(dx, dy) || 1;
+      const off = R0 * (0.75 * Math.sin(L[i] * f1 + p1) + 0.4 * Math.sin(L[i] * f2 + p2)), x = xs[i] - dy / d * off, y = ys[i] + dx / d * off;
+      if (K.kind !== 'galaxy' && Math.sin(L[i] * f3 + p3) < -0.55 && r() < 0.75) { if (r() < 0.5) tiny(x, y, R, '#ffffff'); continue; }   // a thin patch
       if (K.kind === 'galaxy') {
-        if (gap <= 0) { st.push([galaxy(K.a, st.length % 3), ...around(xs[i], ys[i], R * 0.5), R * (0.6 + 0.6 * r()), r() * TAU, 1]); gap = 4 + Math.floor(r() * 4); }
-        gap--; if (r() < 0.5) tiny(xs[i], ys[i], R * 1.5, '#ffffff');
-      } else knot(xs[i], ys[i], R);
+        if (gap <= 0) { st.push([galaxy(K.a, st.length % 3), ...around(x, y, R * 0.5), R * (0.6 + 0.6 * r()), r() * TAU, 1]); gap = 4 + Math.floor(r() * 4); }
+        gap--; if (r() < 0.5) tiny(x, y, R * 1.5, '#ffffff');
+      } else knot(x, y, R);
     }
   }
   return { paths: { 1: path }, w0: line ? line.w0 : beads[0].r, ink: null, stamps: st, tw: tw.slice(0, 8), noHide: true };
 }
 export function drawStamps(c, stamps) {
-  for (const [img, x, y, r, turn, a, dark] of stamps) {
-    c.globalCompositeOperation = dark ? 'source-over' : 'lighter'; c.globalAlpha = a;
+  for (const [img, x, y, r, turn, a, over] of stamps) {
+    c.globalCompositeOperation = over ? 'source-over' : 'lighter'; c.globalAlpha = a;
     if (turn) { c.save(); c.translate(x, y); c.rotate(turn); c.drawImage(img, -r, -r, 2 * r, 2 * r); c.restore(); }
     else c.drawImage(img, x - r, y - r, 2 * r, 2 * r);
   }

@@ -6,7 +6,8 @@
 // Later genres: funk, hip-hop, lofi.
 export default {
   id: 'comic', name: 'Comic',
-  mats: ['Comic red', 'Comic yellow', 'Comic blue', 'Comic cloud', 'Ink hatch'],
+  mats: ['Comic red', 'Pop', 'Comic cloud', 'Ink hatch'],   // shown as Cel, Pop, Cloud, Hatch; the colour picker tints them
+  colors: ['#ee3b3f', '#ff8a1f', '#ffcb2b', '#3ccf6e', '#3ea4ea', '#9b6bff', '#ff6fb5', '#f4efe2'],
   tools: ['glow', 'beads', 'erase'],
   modes: ['free', 'kaleido', 'tiles'],
   limits: { copies: 6, tiles: 4, turns: 3, rotate: true },

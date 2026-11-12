@@ -15,6 +15,22 @@ export const SOFTDROP = a => ({ t: 'drop', a });
 // Hard drop shadow: a plain offset fill, no blur (pixel art)
 export const HDROP = a => ({ t: 'drop', a, hard: true, c: '#000' });
 export const INKL = off => ({ t: 'ink', c: '#0c0c12', off, a: 1 });
+// Film grain over a shape's keyed pieces (paths.all): dark and light specks, a few scratches (Garden)
+export const GRAIN = a => ({ t: 'grain', a });
+let grainTile = null;
+function grainPattern(c) {
+  if (!grainTile) {
+    grainTile = document.createElement('canvas'); grainTile.width = grainTile.height = 96;
+    const g = grainTile.getContext('2d'); let s = 12345;
+    const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    for (let i = 0; i < 2300; i++) { const v = r(); g.fillStyle = v < 0.6 ? `rgba(20,12,6,${0.25 + 0.5 * r()})` : `rgba(255,244,220,${0.2 + 0.5 * r()})`; g.fillRect(Math.floor(r() * 96), Math.floor(r() * 96), 1 + (r() < 0.12 ? 1 : 0), 1 + (r() < 0.12 ? 1 : 0)); }
+    for (let i = 0; i < 5; i++) { g.fillStyle = `rgba(255,244,220,${0.25 + 0.3 * r()})`; g.fillRect(Math.floor(r() * 96), Math.floor(r() * 96), 1, 8 + Math.floor(r() * 30)); }
+    for (let i = 0; i < 4; i++) { g.fillStyle = 'rgba(20,12,6,0.5)'; g.beginPath(); g.arc(r() * 96, r() * 96, 1 + r() * 1.6, 0, TAU); g.fill(); }
+  }
+  const pat = c.createPattern(grainTile, 'repeat');
+  pat.setTransform(new DOMMatrix([0.0026, 0, 0, 0.0026, 0, 0]));
+  return pat;
+}
 export const STROKE = (k, lw, c = '#0c0c12') => ({ t: 'stroke', k, lw, c });
 export const halfTiles = new Map();
 export function patTile(kind, color) {
@@ -54,6 +70,7 @@ export function drawShape(c, sh, ops) {
     if (o.t === 'clip') { c.save(); c.clip(sh.paths[1]); continue; }
     if (o.t === 'end') { c.restore(); continue; }
     if (o.t === 'ink' && !sh.ink) continue;
+    if (o.t === 'grain') { if (sh.paths.all) { c.globalAlpha = o.a; c.fillStyle = grainPattern(c); c.fill(sh.paths.all); c.globalAlpha = 1; } continue; }
     if (o.t === 'stamps') { if (sh.stamps) drawStamps(c, sh.stamps); continue; }
     if (o.t === 'glyphs') { if (sh.cells) drawGlyphs(c, sh.cells, o.c); continue; }
     if (o.t === 'stroke') { const pth = sh.paths[o.k]; if (!pth) continue; c.globalAlpha = 1; c.strokeStyle = o.c; c.lineWidth = o.lw * w0; c.lineJoin = 'round'; c.stroke(pth); continue; }

@@ -1,14 +1,15 @@
-// Garden: magical plants, fungi and fruit, one brush each. A thin stem follows the line and the plant sprouts along it
-// (render/plants.js); with Beads, each bead becomes one head. Saturated flat colours on the dark canvas, each head
-// sitting in a soft two-step halo of its own colour. No outlines, nothing slid toward the light: nothing to re-light.
-// stemW: stem width as a share of the line width. reach: how far pieces reach past the line. beadEvery: Beads thinning.
-import { F } from '../render/ops.js';
+// Garden: magical plants, fungi and fruit, one brush each. The plants grow along the line you draw (render/plants.js)
+// but the line itself is not drawn: fungi stand on their own stalks, flowers and fruit are just the heads.
+// Saturated flat colours with a film grain. No outlines, no glow, nothing slid toward the light: nothing to re-light.
+// reach: how far pieces reach past the line. beadEvery: thinning when used with Beads (not offered in the tab).
+import { F, GRAIN } from '../render/ops.js';
 
 const EVERY = { glowcap: 2, bellcap: 2, trumpet: 2, coral: 3, puffball: 2, starbloom: 2 };   // Beads: one head per this many beads
 const plant = (name, kind, stem, glow, layers, swatch, reach = 0.05) => ({
-  name, accent: layers[layers.length > 2 ? 1 : 0][1], glow, glowA: 0.22, plant: kind, stemW: 0.3, reach, beadEvery: EVERY[kind] || 1,
-  keys: ['halo', 'halo2', 'stalk', ...layers.map(l => l[0])],
-  make: () => [F('halo', glow, 0, 0.09), F('halo2', glow, 0, 0.12), F(1, stem), F('stalk', stem), ...layers.map(([k, c]) => F(k, c))], swatch,
+  name, accent: layers[layers.length > 2 ? 1 : 0][1], glow, glowA: 0, plant: kind, reach, beadEvery: EVERY[kind] || 1,
+  keys: ['stalk', ...layers.map(l => l[0])],
+  // No line along the stroke and no glow: just the plants, under a grain like old film (GRAIN, see render/ops.js)
+  make: () => [F('stalk', stem), ...layers.map(([k, c]) => F(k, c)), GRAIN(0.55)], swatch,
 });
 const orb = (a, b, bg = '#160b33') => `radial-gradient(circle at 42% 38%, ${b} 0 14%, ${a} 30% 52%, ${bg} 56%)`;
 export const plants = [

@@ -7,8 +7,7 @@ import { MIX_DEF, checkpoint, mix, prefs, savePrefs, score, ui } from './state.j
 import { syncUI } from './ui.js';
 import { redrawSoon } from '../render/compose.js';
 import { applySpace, applyTone, applyVolumes } from '../sound/graph.js';
-import { PALETTE } from '../styles/index.js';
-import { world } from '../worlds/index.js';
+import { ink, world } from '../worlds/index.js';
 
 export function ringPath(f0, f1) {
   const n = Math.max(2, Math.ceil((f1 - f0) * 60)), r = 17, out = [], inn = [];
@@ -74,7 +73,7 @@ const capped = (mode, key, r) => {
   return key === 'copies' ? [r[0], Math.min(r[1], L.copies)] : key === 'tiles' ? [r[0], Math.min(r[1], L.tiles)] : key === 'turns' ? [r[0], Math.min(r[1], L.turns)] : r;
 };
 export const pm = () => score.mode;
-export let pk1, pk2;
+export let pk1, pk2, pk3;
 // The four sound knobs, the two level knobs, and the two pattern knobs
 export function initKnobs() {
   for (const [id, key, onChange, col] of [['knDensity', 'density', () => {}, '#62c6ff'], ['knProb', 'prob', () => {}, '#f58bc0'], ['knSpace', 'space', () => applySpace(), '#5fe6c0'], ['knTone', 'tone', () => applyTone(), '#ffd76b']]) {
@@ -94,13 +93,20 @@ export function initKnobs() {
     get: () => score[P1[pm()][0]],
     set: v => { score[P1[pm()][0]] = v; redrawSoon(); },
     fmt: v => P1[pm()][4](v),
-    color: () => PALETTE[ui.color], onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
+    color: ink, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
   });
   pk2 = knob($('pk2'), {
     range: () => capped(pm(), P2[pm()][0], P2[pm()].slice(1, 3)), int: () => P2[pm()][5], px: () => pm() === 'kaleido' ? 160 : 90, def: () => pm() === 'kaleido' ? 0 : null,
     get: () => score[P2[pm()][0]],
     set: v => { score[P2[pm()][0]] = P2[pm()][5] ? v : Math.round(v * 100) / 100; redrawSoon(); },
     fmt: v => P2[pm()][4](v),
-    color: () => PALETTE[ui.color], onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
+    color: ink, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
+  });
+  // Size in kaleidoscope and tiles (in free mode the first knob is Size)
+  pk3 = knob($('pk3'), {
+    range: () => [0, 100], int: true, px: 220, def: () => 50,
+    get: () => score.fscale, set: v => { score.fscale = v; redrawSoon(); },
+    fmt: v => Math.round(v),
+    color: ink, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
   });
 }

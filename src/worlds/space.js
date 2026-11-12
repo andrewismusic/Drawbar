@@ -4,7 +4,7 @@
 // Later genres: soundscape, ambient.
 export default {
   id: 'space', name: 'Space',
-  mats: ['Orion', 'Carina', 'Veil', 'Eagle', 'Stars', 'Gold stars', 'Galaxy', 'Dust'],
+  mats: ['Orion', 'Carina', 'Veil', 'Eagle', 'Stars', 'Gold stars'],
   tools: ['glow', 'beads', 'erase'],
   modes: ['free', 'kaleido', 'tiles'],
   limits: { copies: 6, tiles: 4, turns: 3, rotate: true },

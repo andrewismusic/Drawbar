@@ -2,6 +2,7 @@
 // Turns once per 6 bars; notes sound as copies pass the top.
 import { TAU, mod, lerp, GOLD } from '../core/math.js';
 import { score } from '../core/state.js';
+import { fs } from './free.js';
 
 export const COPIES = [2, 3, 4, 5, 6, 7, 8, 10, 13, 16, 21, 27, 34, 44, 55];
 // Kaleidoscope copies morph from evenly spaced folds (spiral 0) to a golden-angle sunflower (spiral 1)
@@ -13,17 +14,18 @@ export function kCopies() {
 // Phase of an angle as the pattern turns clockwise past the top
 export const sPhase = a => mod(-Math.PI / 2 - a, TAU) / TAU;
 export function copies(c, fn) {
+  const k = fs();
   for (const cp of kCopies()) {
-    c.save(); c.rotate(cp.a); c.scale(cp.s, cp.s); fn(); c.restore();
-    if (score.mirror) { c.save(); c.rotate(cp.a); c.scale(cp.s, -cp.s); fn(); c.restore(); }
+    c.save(); c.rotate(cp.a); c.scale(cp.s * k, cp.s * k); fn(); c.restore();
+    if (score.mirror) { c.save(); c.rotate(cp.a); c.scale(cp.s * k, -cp.s * k); fn(); c.restore(); }
   }
 }
 // Eraser circles in the stroke's own space, one per copy (tiny copies are skipped)
 export function eraseTargets(p, R) {
-  const T = [];
+  const T = [], k = fs();
   for (const cp of kCopies()) {
     if (cp.s < 0.3) continue;
-    const c = Math.cos(-cp.a), sn = Math.sin(-cp.a), x = (p.x * c - p.y * sn) / cp.s, y = (p.x * sn + p.y * c) / cp.s, r2 = (R / cp.s) ** 2;
+    const z = cp.s * k, c = Math.cos(-cp.a), sn = Math.sin(-cp.a), x = (p.x * c - p.y * sn) / z, y = (p.x * sn + p.y * c) / z, r2 = (R / z) ** 2;
     T.push({ x, y, r2 });
     if (score.mirror) T.push({ x, y: -y, r2 });
   }

@@ -61,6 +61,7 @@
           <div class="seg modes" id="modeSeg" role="group" aria-label="Pattern type"></div>
           <div class="kwrap" id="pk1w"><div class="kn" id="pk1" role="slider" tabindex="0" aria-label="Copies"></div><span class="kl" id="pk1l">Copies</span></div>
           <div class="kwrap" id="pk2w"><div class="kn" id="pk2" role="slider" tabindex="0" aria-label="Spiral"></div><button id="rotBtn" class="icon toggle round" aria-pressed="false" aria-label="Rotate" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M17.5 3.5v4h-4"/></svg></button><span class="kl" id="pk2l">Spiral</span></div>
+          <div class="kwrap" id="pk3w"><div class="kn" id="pk3" role="slider" tabindex="0" aria-label="Size"></div><span class="kl">Size</span></div>
           <div class="kwrap"><button id="mirrorBtn" class="icon toggle round" aria-pressed="true" aria-label="Mirror"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3v18" stroke-dasharray="2 2.4"/><path d="M9.5 7L4 17h5.5z" fill="currentColor"/><path d="M14.5 7L20 17h-5.5z"/></svg></button><span class="kl">Mirror</span></div>
         </div>
       </section>
@@ -70,15 +71,19 @@
       </section>
       <section class="group" id="fxGroup" hidden>
         <h2>Effect</h2>
-        <div class="seg fx" id="fxSeg" role="group" aria-label="Effect"><button data-v="smear">Smear</button><button data-v="blocks">Blocks</button><button data-v="jitter">Jitter</button><button data-v="hud">HUD</button></div>
+        <div class="seg fx" id="fxSeg" role="group" aria-label="Effect"><button data-v="smear">Smear</button><button data-v="blocks">Blocks</button><button data-v="jitter">Jitter</button></div>
       </section>
       <section class="group sizegroup">
         <h2 id="sizeLabel">Brush size</h2>
         <div class="sizebar" id="sizeBar" role="slider" tabindex="0" aria-label="Brush size" aria-valuemin="0" aria-valuemax="100"><canvas id="sizeCv"></canvas></div>
       </section>
       <section class="group">
-        <h2>Material</h2>
+        <h2 id="matLabel">Material</h2>
         <div class="swatches" id="swatches"></div>
+      </section>
+      <section class="group" id="colorGroup" hidden>
+        <h2>Color</h2>
+        <div class="swatches" id="colors"></div>
       </section>
     </aside>
   </div>

@@ -6,7 +6,7 @@ import { score, ui } from './state.js';
 import { NEON_W } from './stroke.js';
 import { TOOL, brushSize, eraseRadius, stampRadius } from './tools.js';
 import { geo } from '../render/compose.js';
-import { PALETTE } from '../styles/index.js';
+import { ink } from '../worlds/index.js';
 
 export const sizeCv = $('sizeCv'), SB_PAD = 4;
 export function pill(g, xa, xb, cy, d) {
@@ -34,7 +34,7 @@ export function drawSizeBar() {
   if (er) {
     g.fillStyle = '#000'; g.fill();
     g.save(); g.shadowColor = 'rgba(236,232,220,0.75)'; g.shadowBlur = 8; g.strokeStyle = 'rgba(236,232,220,0.9)'; g.lineWidth = 1.5; g.stroke(); g.restore();
-  } else { g.fillStyle = PALETTE[ui.color]; g.fill(); }
+  } else { g.fillStyle = ink(); g.fill(); }
   el.setAttribute('aria-valuenow', Math.round(v));
   el.setAttribute('aria-label', er ? 'Eraser size' : 'Brush size');
 }
@@ -49,7 +49,7 @@ export function initSizeBar() {
       e.preventDefault();
       try { el.setPointerCapture(e.pointerId); } catch (err) {}
       const now = performance.now();
-      if (now - lastTap < 320) { setV(ui.tool === 'erase' ? 45 : 35); lastTap = 0; drag = null; return; }
+      if (now - lastTap < 320) { setV(ui.tool === 'erase' ? 45 : 26); lastTap = 0; drag = null; return; }
       lastTap = now; drag = e.pointerId; setFrom(e.clientX);
     });
     el.addEventListener('pointermove', e => { if (drag === e.pointerId) setFrom(e.clientX); });

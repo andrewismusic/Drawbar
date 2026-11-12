@@ -13,7 +13,7 @@ export const TOOLS = [
   { id: 'erase', name: 'Erase', kind: 'erase', icon: '<path d="M8 19h12"/><path d="M4.5 15.5l8-8a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L12 18H7z"/>' },
 ];
 export const TOOL = Object.fromEntries(TOOLS.map(t => [t.id, t]));
-export const brushSize = v => 1.5 * Math.pow(8, v / 100);        // 1.5x to 12x the original line
+export const brushSize = v => 1.5 * Math.pow(16, v / 100);       // 1.5x to 24x the original line (12x until v23)
 export const eraseRadius = v => 0.025 * Math.pow(6, v / 100);    // 0.025 to 0.15 of the drawing radius
-// Stamp size from the size bar, in drawing units (the disc's radius is 1): 0.027 to 0.22
+// Stamp size from the size bar, in drawing units (the disc's radius is 1): 0.027 to 0.43
 export const stampRadius = v => 0.018 * brushSize(v);

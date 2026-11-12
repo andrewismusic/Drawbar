@@ -1,11 +1,11 @@
 // Code glyphs (the Glitch world): marks become cells on a fixed grid in the drawing's own space, each with a glyph.
 // Which glyph and how bright are seeded per stroke and cell, so a drawing always looks the same.
-// Glyphs are drawn once per colour into a sheet (8 x 8 cells of 32 px); each cell on screen is one image copy from it.
+// Glyphs are drawn once per colour into a sheet (8 x 8 cells of 64 px); each cell on screen is one image copy from it.
 import { hash32 } from '../core/math.js';
 
-export const GCELL = 0.045;   // grid size, in drawing units (the disc's radius is 1)
+export const GCELL = 0.09;    // doubled in v24   // grid size, in drawing units (the disc's radius is 1)
 const GLYPHS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789:=+*<>|';
-export const SZ = 32, COLS = 8;
+export const SZ = 64, COLS = 8;
 export const LEVELS = [0.5, 0.78, 1];
 export const NGLYPH = Math.min(GLYPHS.length, COLS * COLS);
 const sheets = new Map();
@@ -14,7 +14,7 @@ export function sheet(color) {
   if (c) return c;
   c = document.createElement('canvas'); c.width = c.height = SZ * COLS;
   const g = c.getContext('2d');
-  g.fillStyle = color; g.shadowColor = color; g.shadowBlur = 5;
+  g.fillStyle = color; g.shadowColor = color; g.shadowBlur = 9;
   g.font = `bold ${SZ * 0.9}px ui-monospace, Menlo, Consolas, "Noto Sans Mono CJK JP", monospace`;
   g.textAlign = 'center'; g.textBaseline = 'middle';
   for (let i = 0; i < Math.min(GLYPHS.length, COLS * COLS); i++) g.fillText(GLYPHS[i], (i % COLS + 0.5) * SZ, (Math.floor(i / COLS) + 0.5) * SZ);

@@ -162,6 +162,7 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .row{display:flex; gap:10px; align-items:center}
 .prow{display:flex; gap:8px; align-items:center}
 .prow .kwrap{width:48px}
+@media (max-width:440px){ .prow{gap:5px} .prow .kwrap{width:44px} }
 .icon.round{width:46px; height:46px; min-height:46px; border-radius:50%}
 .seg.fx{align-self:flex-start}
 .seg.fx button{min-height:32px; padding:0 9px; font-size:13px}
@@ -189,7 +190,7 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .sw.pixtoggle[aria-pressed="true"]{color:var(--ink); border-color:var(--ink)}
 @media (min-width:880px) and (min-aspect-ratio:5/4){
   .group h2{display:block}
-  .prow{min-height:64px}
+  .prow{min-height:64px; flex-wrap:wrap; row-gap:8px}   /* three knobs and Mirror do not fit beside the pattern buttons: they wrap below */
   .tools .tool{flex:1 1 0}
   .sizegroup{flex:none; max-width:none}
   .swatches{grid-template-columns:repeat(10, minmax(0, 1fr)); gap:4px}

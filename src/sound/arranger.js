@@ -47,6 +47,7 @@ export function select(cands, budget, steps, poly, clocked, swing) {
 
 export function arrange() {
   // Strokes hidden under newer ones are out of the music too
+  const zoom = fs();   // Size: what you hear is read from the drawing as it appears
   const S = score.strokes.filter(s => !HIDDEN.has(s)), n = S.length, kale = score.mode === 'kaleido', clocked = score.timing === 'clocked';
   let hmin = 1, hmax = 0;
   for (const s of S) for (let i = 0; i < s.pts.length; i += 3) { const h = rawH(s.pts[i][0], s.pts[i][1]); hmin = Math.min(hmin, h); hmax = Math.max(hmax, h); }
@@ -83,7 +84,7 @@ export function arrange() {
       for (const s of statics) {
         const rec = recOf(s);
         for (const q of sampleArc(s, 0.05)) {
-          const a = Math.atan2(q.y, q.x), r0 = Math.hypot(q.x, q.y), w = 0.45 + 0.55 * (1 - q.sn);
+          const a = Math.atan2(q.y, q.x), r0 = Math.hypot(q.x, q.y) * zoom, w = 0.45 + 0.55 * (1 - q.sn);
           if (kale) {
             // The pattern turns clockwise; every copy sounds as it passes the top. Smaller copies sit lower and quieter
             for (let k = 0; k < KC.length; k += kStep) {
@@ -95,7 +96,7 @@ export function arrange() {
             // Tiles: each turned (and mirrored) copy sounds as it rises past the reading line; on hexagons the in-between row answers half a cycle later
             const { a: A, CH, rowH, hex } = TG;
             TG.mats.forEach((M, i) => {
-              const x = M[0] * q.x + M[2] * q.y, y = M[1] * q.x + M[3] * q.y, hr = mod(x, A) / A, h = relH(hr);
+              const x = (M[0] * q.x + M[2] * q.y) * zoom, y = (M[1] * q.x + M[3] * q.y) * zoom, hr = mod(x, A) / A, h = relH(hr);
               cands.push({ ph: mod(y, CH) / CH, h, w: w * (i ? 0.75 : 0.9), s, rec, m: i > 0, pan: (hr * 2 - 1) * 0.6 });
               if (hex) { const h2 = mod(x + A / 2, A) / A; cands.push({ ph: mod(y + rowH, CH) / CH, h: relH(h2), w: w * 0.65, s, rec, m: true, pan: (h2 * 2 - 1) * 0.6 }); }
             });
@@ -140,12 +141,14 @@ export function arrange() {
   const others = loops.slice(0, -1), slots = Math.max(1, MAP.maxLoops - 1), G = Math.max(1, Math.ceil(others.length / slots));
   const C = COPIES[score.copies];
   if (tonal) loops.forEach((s, j) => {
-    s._Pb = loopBeats(s._dur * score.tempo / 60);
+    // Each loop keeps its own length and its own start, so loops drift against each other instead of restarting
+    // together. Clocked: both are rounded to the nearest 16th note (a quarter of a beat).
+    s._Pb = Math.max(0.5, Math.round(s._dur * score.tempo / 60 * 4) / 4);
     const period = clocked ? s._Pb : s._dur, base = clocked ? 'beat' : 'sec', origin = clocked ? s.startBeat : s.start;
     const steps = clocked ? s._Pb * 4 : Math.max(8, Math.round(s._dur * 8)), rec = recOf(s);
     const cands = animEventIdx(s).map(i => {
       const pt = s.pts[i], sn = Math.min(s._sp[i] / 2.2, 1);
-      return { ph: pt[2] / s._dur, h: relH(rawH(pt[0], pt[1])), w: 0.4 + 0.5 * (1 - sn), s, rec, m: false, pan: clamp(pt[0], -1, 1) * 0.6 };
+      return { ph: pt[2] / s._dur, h: relH(rawH(pt[0], pt[1])), w: 0.4 + 0.5 * (1 - sn), s, rec, m: false, pan: clamp(pt[0] * zoom, -1, 1) * 0.6 };
     });
     const r = select(cands, Math.max(3, 8 * P.dens), steps, true, clocked, P.swing);
     kept += r.kw; dropped += r.dw;

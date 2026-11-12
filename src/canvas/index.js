@@ -24,7 +24,7 @@ export const cycleBeats = () => 4 * cycleBars();
 export const mirrored = () => score.mode === 'free' ? score.fmirror : score.mirror;
 // Pitch reader: how high a point sits, 0-1
 export function rawH(x, y) {
-  if (score.mode === 'free') { const k = fs(); x *= k; y *= k; }
+  { const k = fs(); x *= k; y *= k; }
   const m = score.mode, r = Math.min(Math.hypot(x, y), 1);
   if (m === 'tiles') { const a = tileGeo().a; return mod(x, a) / a; }
   return m === 'free' ? MAP.hy * clamp((1 - y) / 2, 0, 1) + (1 - MAP.hy) * r : r;
@@ -33,7 +33,7 @@ export function rawH(x, y) {
 export function strokePhase(s) {
   const m = score.mode;
   if (m === 'kaleido') return sPhase(s._ma);
-  if (m === 'tiles') { const g = tileGeo(); return mod(s._my, g.CH) / g.CH; }
+  if (m === 'tiles') { const g = tileGeo(); return mod(s._my * fs(), g.CH) / g.CH; }
   return (s._mx + 1) / 2;
 }
 export function patternAmount() {

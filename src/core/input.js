@@ -11,6 +11,7 @@ import { audioReady, beatAt, playing, rotAt, scrollAt, sessionNow, startAudio, v
 import { syncUI } from './ui.js';
 import { cv, geo, redrawSoon } from '../render/compose.js';
 import { MATS } from '../styles/index.js';
+import { world } from '../worlds/index.js';
 
 export let cur = null, erasing = null;
 export function toScreen(e) {
@@ -22,8 +23,9 @@ export function toScreen(e) {
 }
 export function unrot(v) {
   const B = beatAt(visNow());
-  if (tiled()) return { x: v.x, y: v.y + scrollAt(B) };
-  const a = -rotAt(B), c = Math.cos(a), s = Math.sin(a), k = score.mode === 'free' ? fs() : 1;
+  const k = fs();
+  if (tiled()) return { x: v.x / k, y: (v.y + scrollAt(B)) / k };
+  const a = -rotAt(B), c = Math.cos(a), s = Math.sin(a);
   return { x: (v.x * c - v.y * s) / k, y: (v.x * s + v.y * c) / k };
 }
 export const pressureOf = e => e.pointerType === 'pen' ? (e.pressure || 0.5) : 0.5;
@@ -52,7 +54,7 @@ export function eraseAt(p) {
       for (let i = 1; i < run.length; i++) rl += Math.hypot(run[i][0] - run[i - 1][0], run[i][1] - run[i - 1][1]);
       if (run.length >= 3 && rl > 0.025) {
         const t0 = run[0][2];
-        const piece = { id: next.some(x => x.id === s.id) ? takeId() : s.id, tool: s.tool, color: s.color, size: s.size, fx: s.fx, pts: run.map(q => [q[0], q[1], q[2] - t0, q[3]]), start: s.start, startBeat: s.startBeat };
+        const piece = { id: next.some(x => x.id === s.id) ? takeId() : s.id, tool: s.tool, color: s.color, size: s.size, fx: s.fx, tint: s.tint, pts: run.map(q => [q[0], q[1], q[2] - t0, q[3]]), start: s.start, startBeat: s.startBeat };
         prepare(piece); next.push(piece);
       }
       run = [];
@@ -74,7 +76,7 @@ export function finishStroke(e) {
   if (Math.hypot(p.x - last[0], p.y - last[1]) > 0.002) cur.pts.push([p.x, p.y, t, pressureOf(e)]);
   const pts = cur.pts.length > 2 ? smoothStroke(cur.pts, cur.size) : cur.pts;
   const S = sessionNow();
-  const s = { id: takeId(), tool: cur.tool, color: cur.color, size: cur.size, fx: MATS[cur.color].live ? score.fx : undefined, pts, start: S, startBeat: Math.ceil(beatAt(S)) };
+  const s = { id: takeId(), tool: cur.tool, color: cur.color, size: cur.size, fx: MATS[cur.color].live ? score.fx : undefined, tint: cur.tint, pts, start: S, startBeat: Math.round(beatAt(S) * 4) / 4 };
   cur = null;
   prepare(s);
   checkpoint();
@@ -83,7 +85,7 @@ export function finishStroke(e) {
 }
 function finishStamp() {
   const S = sessionNow();
-  const s = { id: takeId(), tool: cur.tool, color: cur.color, size: clamp(cur.r * 40, 1.5, 12), pts: stampPts(cur.stamp, cur.cx, cur.cy, cur.r, cur.rot), start: S, startBeat: Math.ceil(beatAt(S)) };
+  const s = { id: takeId(), tool: cur.tool, color: cur.color, size: clamp(cur.r * 40, 1.5, 24), pts: stampPts(cur.stamp, cur.cx, cur.cy, cur.r, cur.rot), start: S, startBeat: Math.round(beatAt(S) * 4) / 4 };
   cur = null;
   prepare(s);
   checkpoint();
@@ -102,8 +104,8 @@ export function initInput() {
       eraseAt(p);
     } else if (TOOL[ui.tool].stamp) {
       // Stamp: a tap places it at the size bar's size; dragging sets its size and turns it to point at the finger
-      cur = { id: e.pointerId, stamp: TOOL[ui.tool].stamp, tool: ui.tool, color: ui.color, cx: p.x, cy: p.y, r: stampRadius(ui.brushV) / (score.mode === 'free' ? fs() : 1), rot: -Math.PI / 2, moved: false, pts: [] };
-    } else cur = { id: e.pointerId, tool: ui.tool, color: ui.color, size: brushSize(ui.brushV) / (score.mode === 'free' ? fs() : 1), pts: [[p.x, p.y, 0, pressureOf(e)]], t0: e.timeStamp / 1000, sx: p.x, sy: p.y };
+      cur = { id: e.pointerId, stamp: TOOL[ui.tool].stamp, tool: ui.tool, color: ui.color, cx: p.x, cy: p.y, r: stampRadius(ui.brushV) / fs(), rot: -Math.PI / 2, moved: false, pts: [] };
+    } else cur = { id: e.pointerId, tool: ui.tool, color: ui.color, tint: world().colors ? ui.tint : undefined, size: brushSize(ui.brushV) / fs(), pts: [[p.x, p.y, 0, pressureOf(e)]], t0: e.timeStamp / 1000, sx: p.x, sy: p.y };
     e.preventDefault();
   });
   cv.addEventListener('pointermove', e => {

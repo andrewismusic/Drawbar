@@ -11,4 +11,5 @@ export const glyphMats = [
   ['Cyan', '#35e6ff', '#0b5866'],
   ['Alert', '#ff4258', '#6b111d'],
   ['Ghost', '#d8e2ff', '#3a4466'],
-].map(([name, c, tint]) => ({ name, accent: c, glow: c, glowA: 0.14, make: code(c, tint), glyph: true, live: true, swatch: sw(c) }));
+].map(([name, c, tint]) => ({ name, accent: c, glow: c, glowA: 0.14, make: code(c, tint), glyph: true, live: true, swatch: sw(c), swatchFor: sw }));
+glyphMats[0].label = 'Code';

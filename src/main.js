@@ -10,8 +10,8 @@ import { initControls, applyView, syncUI } from './core/ui.js';
 import { layout } from './core/layout.js';
 import { playing, lastEnd, setLastEnd, sessionNow } from './core/transport.js';
 import { rearrange } from './sound/arranger.js';
-import { switchWorld } from './core/settings.js';
-import { prefs } from './core/state.js';
+import { applySettings, switchWorld } from './core/settings.js';
+import { prefs, snap } from './core/state.js';
 import { TABS } from './worlds/index.js';
 import { schedule } from './sound/scheduler.js';
 import { frame } from './render/compose.js';
@@ -31,6 +31,8 @@ rearrange();
 }
 // Reopen the style tab used last time
 switchWorld(TABS.some(w => w.id === prefs.world) ? prefs.world : 'comic');
+// A different map every visit (the dice's kind of randomness: it only picks which map)
+applySettings({ ...snap().set, map: Math.floor(Math.random() * 1000) });
 applyView();
 layout();
 syncUI();

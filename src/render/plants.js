@@ -25,7 +25,7 @@ function stalk(P, a, b, bend, w0, w1) {
   P.lineTo(b[0] - px * w1, b[1] - py * w1); P.quadraticCurveTo(c[0] - px * w1, c[1] - py * w1, a[0] - px * w0, a[1] - py * w0); P.closePath();
   return Math.atan2(b[1] - c[1], b[0] - c[0]);
 }
-const halo = (g, c, R) => { circ(g.P.halo, c, R * 1.9); circ(g.P.halo2, c, R * 1.3); };
+const halo = () => {};   // heads no longer glow (v24); kept so the head recipes read the same
 
 // ----- Heads. g: { P: keyed paths, rnd }, (x, y): where the stalk ends, R: size, ang: the way the stalk points -----
 const HEADS = {
@@ -113,18 +113,18 @@ const HEADS = {
     for (let k = 0; k < 5; k++) { const a = g.rnd() * TAU; circ(g.P.dot, [c[0] + Math.cos(a) * R * 0.14, c[1] + Math.sin(a) * R * 0.14], R * 0.05); }
   },
 };
-// How each plant sprouts along a line, in multiples of the line's half-width: gap between sprouts, stalk length,
-// head size, stalk width, and which side (up = toward the top of the drawing, alt = alternating, any = either)
+// How each plant grows along a line, in multiples of the line's half-width: gap between plants, stalk length (0 = no
+// stalk: flowers and fruit are just heads, sitting on the line), head size, stalk width, and which side (up = toward the top of the drawing, alt = alternating, any = either)
 const SPROUT = {
   glowcap: { gap: [1.6, 2.8], len: [1.2, 2.8], R: [0.8, 1.3], w: 0.16, side: 'up' },
   bellcap: { gap: [1.3, 2.3], len: [1.4, 3.2], R: [0.55, 0.95], w: 0.14, side: 'up' },
   trumpet: { gap: [1.9, 2.9], len: [0.7, 1.8], R: [0.9, 1.3], w: 0.14, side: 'up' },
-  spiral: { gap: [0.9, 1.5], len: [0.5, 1.5], R: [0.7, 1.2], w: 0.1, side: 'alt' },
+  spiral: { gap: [1.0, 1.7], len: [0, 0], R: [0.7, 1.2], w: 0, side: 'alt' },
   coral: { gap: [3.0, 4.2], len: [0.3, 0.6], R: [1.1, 1.6], w: 0.2, side: 'up' },
-  moonberry: { gap: [1.0, 1.7], len: [0.5, 1.3], R: [0.7, 1.0], w: 0.08, side: 'alt' },
-  lantern: { gap: [1.3, 2.2], len: [0.8, 1.7], R: [0.7, 1.0], w: 0.07, side: 'alt' },
+  moonberry: { gap: [1.0, 1.7], len: [0, 0], R: [0.7, 1.0], w: 0, side: 'any' },
+  lantern: { gap: [1.3, 2.2], len: [0, 0], R: [0.7, 1.0], w: 0, side: 'any' },
   puffball: { gap: [1.4, 2.3], len: [1.0, 2.4], R: [0.7, 1.1], w: 0.13, side: 'up' },
-  starbloom: { gap: [2.2, 3.2], len: [0.9, 2.0], R: [1.0, 1.5], w: 0.1, side: 'any' },
+  starbloom: { gap: [2.2, 3.2], len: [0, 0], R: [1.0, 1.5], w: 0, side: 'any' },
 };
 
 // Grow a plant. keys: the piece names this plant's material colours. Returns { key: Path2D, ..., all: every piece }.
@@ -146,12 +146,12 @@ export function growPlant(kind, keys, id, line, beads) {
       const side = S.side === 'up' ? up : S.side === 'alt' ? (alt = -alt) : rnd() < 0.5 ? 1 : -1;
       const ang = Math.atan2(ny[j] * side, nx[j] * side) + (rnd() - 0.5) * 0.7, len = w0 * between(S.len);
       const base = [xs[j], ys[j]], tip = [xs[j] + Math.cos(ang) * len, ys[j] + Math.sin(ang) * len];
-      const arrive = stalk(P.stalk, base, tip, (rnd() - 0.5) * 0.5, w0 * S.w, w0 * S.w * 0.7);
+      const arrive = len > 0 ? stalk(P.stalk, base, tip, (rnd() - 0.5) * 0.5, w0 * S.w, w0 * S.w * 0.7) : S.side === 'any' ? rnd() * TAU : ang;
       HEADS[kind](g, tip[0], tip[1], w0 * between(S.R) * 1.35, arrive);
       d += w0 * between(S.gap);
     }
   }
   const out = {}, all = new Path2D();
-  for (const k of keys) { out[k] = made[k] || new Path2D(); if (k !== 'halo' && k !== 'halo2') all.addPath(out[k]); }
+  for (const k of keys) { out[k] = made[k] || new Path2D(); all.addPath(out[k]); }
   return { ...out, all };
 }
