@@ -3,8 +3,9 @@
 // stemW: stem width as a share of the line width (0 = no stem drawn). reach: how far pieces reach past the line.
 import { F } from '../render/ops.js';
 
+const EVERY = { sunflower: 3, daisy: 2, lavender: 2, grass: 2, blossom: 2 };   // Beads: one bloom per this many beads
 const plant = (name, accent, kind, stem, stemW, layers, swatch, reach = 0.035) => ({
-  name, accent, glow: accent, glowA: 0, plant: kind, stemW, reach, keys: layers.map(l => l[0]),
+  name, accent, glow: accent, glowA: 0, plant: kind, stemW, reach, beadEvery: EVERY[kind] || 1, keys: layers.map(l => l[0]),
   make: () => [F(1, stem), ...layers.map(([k, c]) => F(k, c))], swatch,
 });
 const bloom = (petal, ctr, bg) => `radial-gradient(circle, ${ctr} 0 22%, ${petal} 24% 58%, ${bg} 60%)`;

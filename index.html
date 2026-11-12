@@ -45,7 +45,8 @@
   <div class="main" id="main">
     <div class="left" id="left">
       <div class="stage" id="stage"><canvas id="cv" aria-label="Drawing canvas. Draw to change the music."></canvas></div>
-      <section class="knobs" id="knobRow" aria-label="Sound controls">
+      <section class="knobs sound" id="knobRow" aria-label="Sound controls: these change the music only, not the drawing" title="These change the music only, not the drawing">
+        <div class="slab" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.8 7.8 0 0 1 0 11"/></svg><span>Sound</span></div>
         <div class="kwrap big"><div class="kn big" id="knDensity" role="slider" tabindex="0" aria-label="Density" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Density</span></div>
         <div class="kwrap big"><div class="kn big" id="knProb" role="slider" tabindex="0" aria-label="Probability" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Probability</span></div>
         <div class="kwrap big"><div class="kn big" id="knSpace" role="slider" tabindex="0" aria-label="Space" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Space</span></div>

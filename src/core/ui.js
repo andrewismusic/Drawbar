@@ -49,6 +49,7 @@ export function syncUI() {
   if (sel.offsetLeft < strip.scrollLeft || sel.offsetLeft + sel.offsetWidth > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = sel.offsetLeft - 8;
   for (const md of MODES) $('mode-' + md.id).hidden = !w.modes.includes(md.id);
   for (const t of TOOLS) $('tool-' + t.id).hidden = !w.tools.includes(t.id);
+  $('tools').classList.toggle('many', w.tools.length > 5);
   MATS.forEach((M, i) => { const b = $('sw-' + i); b.hidden = !w.matIdx.includes(i); b.style.order = w.matIdx.indexOf(i); });
   $('pixBtn').hidden = !(w.options && w.options.pixel); $('pixBtn').setAttribute('aria-pressed', String(!!score.pixel));
   $('pk2w').hidden = free && !L.rotate;

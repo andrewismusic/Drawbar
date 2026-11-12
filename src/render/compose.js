@@ -5,7 +5,7 @@ import { $ } from '../core/dom.js';
 import { cur, eraseAt, erasing, unrot } from '../core/input.js';
 import { relayout } from '../core/layout.js';
 import { SQ3, TAU, clamp, hash32, mod } from '../core/math.js';
-import { anim, rebuild, stepRandomize } from '../core/settings.js';
+import { anim, hiddenChanged, rebuild, stepRandomize } from '../core/settings.js';
 import { score } from '../core/state.js';
 import { BEAD_R, NEON_W } from '../core/stroke.js';
 import { TOOL } from '../core/tools.js';
@@ -70,34 +70,62 @@ export const bbHit = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1]
 // Find still strokes that newer still strokes cover completely (checked on a small mask of the drawing, copies included).
 // They are skipped when drawing; undo or erasing the stroke on top brings them straight back.
 export let HIDDEN = new Set();
-export function refreshHidden() { HIDDEN = computeHidden(); }
+export function refreshHidden() { HIDDEN = computeHidden(); hiddenAt = 0; hiddenJob = null; }
 export const maskC = document.createElement('canvas'), maskX = maskC.getContext('2d', { willReadFrequently: true });
-export function computeHidden() {
-  const hid = new Set(), S = score.strokes;
-  if (S.length < 2) return hid;
-  const sc = Math.min(1, 200 / Math.max(fb.width, fb.height)), W = Math.max(8, Math.round(fb.width * sc)), H = Math.max(8, Math.round(fb.height * sc));
+// The work is cut into steps (one stroke each) so it can also run a little per frame: see checkHiddenSoon.
+function hiddenStart() {
+  const S = score.strokes.slice(), sc = Math.min(1, 200 / Math.max(fb.width, fb.height)), W = Math.max(8, Math.round(fb.width * sc)), H = Math.max(8, Math.round(fb.height * sc));
   if (maskC.width !== W || maskC.height !== H) { maskC.width = W; maskC.height = H; }
-  const cov = new Uint8Array(W * H);
-  for (let i = S.length - 1; i >= 0; i--) {
-    const s = S[i];
-    if (TOOL[s.tool].kind !== 'static' || !s._shape) continue;
+  return { S, i: S.length < 2 ? -1 : S.length - 1, hid: new Set(), cov: new Uint8Array(W * H), any: false, W, H };
+}
+// Runs for about ms milliseconds; true when finished
+function hiddenStep(J, ms) {
+  const { S, hid, cov, W, H } = J, t0 = performance.now();
+  while (J.i >= 0) {
+    const s = S[J.i];
+    if (TOOL[s.tool].kind !== 'static' || !s._shape) { J.i--; continue; }
     const sh = s._shape, sil = sh.ink || sh.paths[1];
-    if (!sil) continue;
-    maskX.setTransform(1, 0, 0, 1, 0, 0); maskX.clearRect(0, 0, W, H);
-    frameNorm(maskX, maskC); maskX.fillStyle = '#000';
-    // Test a slightly fattened outline (shadows and outlines reach a little further than the body)
-    forCopies(maskX, () => { maskX.fill(sil); maskX.lineWidth = sh.w0 * 0.6; maskX.strokeStyle = '#000'; maskX.stroke(sil); if (sh.paths.all) { maskX.fill(sh.paths.all); maskX.stroke(sh.paths.all); } else if (s.color != null && MATS[s.color].extra === 'vine') { for (const k of ['leaf', 'pet']) sh.paths[k] && (maskX.fill(sh.paths[k]), maskX.stroke(sh.paths[k])); } }, s);
-    const d = maskX.getImageData(0, 0, W, H).data;
-    let covered = true, any = false;
-    for (let p = 0, q = 3; p < W * H; p++, q += 4) if (d[q] > 6) { any = true; if (!cov[p]) { covered = false; break; } }
-    if (any && covered) { hid.add(s); continue; }
+    if (!sil) { J.i--; continue; }
+    // Two phases per stroke (test it, then add its cover), so a step can pause between them
+    // Nothing above it yet covers anything: it cannot be hidden, so skip the test
+    if (J.any && !J.tested) {
+      J.tested = true;
+      maskX.setTransform(1, 0, 0, 1, 0, 0); maskX.clearRect(0, 0, W, H);
+      frameNorm(maskX, maskC); maskX.fillStyle = '#000';
+      // Test a slightly fattened outline (shadows and outlines reach a little further than the body)
+      forCopies(maskX, () => { maskX.fill(sil); maskX.lineWidth = sh.w0 * 0.6; maskX.strokeStyle = '#000'; maskX.stroke(sil); if (sh.paths.all) maskX.fill(sh.paths.all); else if (s.color != null && MATS[s.color].extra === 'vine') { for (const k of ['leaf', 'pet']) sh.paths[k] && (maskX.fill(sh.paths[k]), maskX.stroke(sh.paths[k])); } }, s);
+      const d = maskX.getImageData(0, 0, W, H).data;
+      let covered = true, any = false;
+      for (let p = 0, q = 3; p < W * H; p++, q += 4) if (d[q] > 6) { any = true; if (!cov[p]) { covered = false; break; } }
+      if (any && covered) { hid.add(s); J.i--; J.tested = false; continue; }
+      if (performance.now() - t0 > ms) break;
+    }
+    J.i--; J.tested = false;
     // Only the solid middle of this stroke counts as covering what lies beneath
     maskX.setTransform(1, 0, 0, 1, 0, 0); maskX.clearRect(0, 0, W, H); frameNorm(maskX, maskC);
     forCopies(maskX, () => maskX.fill(sh.paths[1]), s);
     const e = maskX.getImageData(0, 0, W, H).data;
-    for (let p = 0, q = 3; p < W * H; p++, q += 4) if (e[q] > 250) cov[p] = 1;
+    for (let p = 0, q = 3; p < W * H; p++, q += 4) if (e[q] > 250) { cov[p] = 1; J.any = true; }
+    if (performance.now() - t0 > ms) break;
   }
-  return hid;
+  return J.i < 0;
+}
+export function computeHidden() { const J = hiddenStart(); hiddenStep(J, Infinity); return J.hid; }
+// After a new stroke or an erase, the hidden-stroke test runs a moment later, a few milliseconds per frame, so drawing
+// never waits for it. If the answer changed, the music is re-arranged and the layers are redrawn in the background.
+let hiddenAt = 0, hiddenJob = null, softWanted = false;
+export function checkHiddenSoon() { hiddenAt = performance.now() + 250; hiddenJob = null; }
+function stepHiddenCheck(now) {
+  if (!hiddenAt || now < hiddenAt || cur || erasing) return;
+  if (!hiddenJob) hiddenJob = hiddenStart();
+  if (!hiddenStep(hiddenJob, 3)) return;
+  const hid = hiddenJob.hid, live = new Set(score.strokes);
+  hiddenAt = 0; hiddenJob = null;
+  let same = true;
+  for (const s of hid) if (!HIDDEN.has(s)) same = false;
+  for (const s of HIDDEN) if (live.has(s) && !hid.has(s)) same = false;
+  HIDDEN = hid;
+  if (!same) { hiddenChanged(); softWanted = true; }
 }
 // Still strokes become units, drawn into the cached layers; moving strokes are passed through and drawn every frame
 export function unitsOf(strokes) {
@@ -117,11 +145,13 @@ let lightNeeded = false;
 // Re-lighting while the picture turns: redraw the still strokes a slice per frame into a spare set of layers,
 // then cross-fade to them, so the light keeps up without ever stalling a frame
 export function stepRelight(now) {
-  const R = relight, S = R.list || (R.list = unitsOf(score.strokes)), budget = 1200;
+  const R = relight, S = R.list || (R.list = unitsOf(score.strokes)), budget = 500;
   let cost = 0;
   const saved = composeRot;
   setComposeRot(R.rot);
-  while (R.i < S.length && cost < budget) {
+  const t0 = performance.now();
+  // Stop on the cost budget or after 6 ms, whichever comes first, so a re-light never holds a frame for long
+  while (R.i < S.length && cost < budget && performance.now() - t0 < 6) {
     const it = S[R.i++];
     if (it.list) {
       if (!R.cur) {
@@ -151,6 +181,34 @@ export function releaseCanvases() {
   ITEMS = []; relight = null; fade = null; groupsDirty = true;
   if (quality !== 1) { quality = 1; relayout(); }
   slowFor = fastFor = 0; frameEma = 16;
+}
+// A new stroke on top: draw just that stroke into the top cached layer (one stroke x copies), instead of redrawing
+// every stroke. This is what keeps drawing fluid: the pause after a stroke no longer grows with the drawing.
+export function appendStroke(s) {
+  if (groupsDirty) return;
+  const M = MATS[s.color];
+  if (relight) relight = null;   // a re-light in progress would miss the new stroke; it starts again by itself
+  if (TOOL[s.tool].kind !== 'static') { ITEMS.push({ s }); return; }
+  let top = ITEMS[ITEMS.length - 1];
+  if (!top || !top.canvas) {
+    const gi = ITEMS.filter(it => it.canvas).length;
+    if (!pool[gi]) { const c = document.createElement('canvas'); c.width = fb.width; c.height = fb.height; pool[gi] = c; }
+    const c = pool[gi], x = c.getContext('2d');
+    x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, c.width, c.height);
+    top = { canvas: c, x }; ITEMS.push(top);
+  }
+  if (M.lit) lightNeeded = true;
+  const saved = composeRot;
+  setComposeRot(litRot);
+  frameNorm(top.x, top.canvas);
+  forCopies(top.x, () => drawShape(top.x, s._shape, M.ops), s);
+  setComposeRot(saved);
+  if (M.glowA) {
+    frameNorm(gsctx, glowS); gsctx.lineCap = 'round'; gsctx.lineJoin = 'round'; gsctx.shadowBlur = 4;
+    gsctx.globalAlpha = M.glowA; gsctx.strokeStyle = gsctx.shadowColor = M.glow; gsctx.lineWidth = bloomW(s);
+    forCopies(gsctx, () => gsctx.stroke(s._path), s);
+    gsctx.globalAlpha = 1; gsctx.shadowBlur = 0;
+  }
 }
 export function renderGroups(rot = 0) {
   relight = null; fade = null;
@@ -292,12 +350,15 @@ export function frame(now) {
   watchFrameRate(now);
   if (anim) stepRandomize(now);
   if (erasing) { erasing.p = unrot(erasing.screen); eraseAt(erasing.p); }
-  if (needsRebuild && now - lastRebuildT > 120) { needsRebuild = false; lastRebuildT = now; rebuild(); }
+  if (needsRebuild && now - lastRebuildT > 120) { needsRebuild = false; lastRebuildT = now; rebuild(undefined, true); }
   ensureCanvases();
   const S = visNow(), B = beatAt(S), rot = rotAt(B), W = geo.W, H = geo.H, cd = cellDims();
   // While the picture turns, re-light the still strokes now and then so the light stays put (only when that is cheap)
-  if (groupsDirty) renderGroups(rot);
+  stepHiddenCheck(now);
+  if (groupsDirty) { renderGroups(rot); softWanted = false; }
   else if (relight) stepRelight(now);
+  // A background redraw (after the hidden-stroke test changed its mind): same slice-per-frame path as re-lighting
+  else if (softWanted && !fade) { softWanted = false; relight = { rot: lightNeeded && !world().render.fixedLight ? rot + 0.03 : litRot, i: 0, gi: 0, items: [], cur: null }; }
   else if (!fade && lightNeeded && !world().render.fixedLight && rot !== litRot && Math.abs(mod(rot - litRot + Math.PI, TAU) - Math.PI) > 0.1) relight = { rot: rot + 0.03, i: 0, gi: 0, items: [], cur: null };
   if (fade && now - fade.t0 > 160) fade = null;
   setComposeRot(rot);

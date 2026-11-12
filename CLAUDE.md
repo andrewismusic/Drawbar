@@ -134,6 +134,14 @@ Heaviest first:
 
 Tiles is cheaper than kaleidoscope: it draws one repeating cell and fills the view with it as a pattern, and it never re-lights. Fully covered strokes are skipped (`computeHidden`, on a 200 px mask).
 
+**Drawing must never pause the animation** (v21). Finishing a stroke used to redraw every stroke in every copy and run the hidden-stroke test, all in one frame (47 ms in Classic, 54 ms in Comic, 316 ms in Garden with 12 strokes in the kaleidoscope: the rotation visibly stopped). Now:
+- `strokeAdded(s)` (settings.js) calls `appendStroke(s)` (compose.js): only the new stroke is drawn, into the top cached layer. 2–5 ms whatever the size of the drawing.
+- The hidden-stroke test runs a moment later, about 3 ms per frame (`checkHiddenSoon`, `stepHiddenCheck`); if its answer changes, the music is re-arranged (`hiddenChanged`) and the layers are redrawn in the background through the re-light path (slice per frame, cross-fade). Erasing uses the same lazy path (`rebuild(tc, true)`).
+- Re-lighting stops each frame on a cost budget (500) or after 6 ms.
+- Undo, clear, clip load and knob turns still redraw everything at once (`rebuild`).
+- Garden: Beads blooms are thinned (`beadEvery`), since a line of bead sunflowers was 38 ms per redraw.
+- Classic keeps v18's soft materials in the kaleidoscope, so it still has long frames from re-lighting (up to ~80 ms in the test); the other tabs had none over 34 ms.
+
 **Biggest remaining win (not built):** render each still stroke once into a sprite at 8–16 pre-lit angles, then stamp copies with `drawImage`. Copies become nearly free; lighting is very slightly approximate; costs memory.
 
 ## Dead code
@@ -233,6 +241,8 @@ Planned later: a preference choosing between the realistic and comic material st
 - **Export:** UI exists (real-time recording). The owner said they'd think about the approach; local download fallback needed.
 - **Drum levels:** drive curves were just loudness-compensated (v18) and the kick is quieter. This hasn't been checked by ear yet, so confirm with the owner.
 - **Phone layout:** the top bar takes two rows.
+- **Sound knobs:** Density, Probability, Space and Tone sit in an outlined group with a speaker icon and a "Sound" label (v21), to show they change the music only.
+- **Glitch:** the owner wants more dynamic visuals (references: scan-line smears with colour fringing, datamosh blocks, pixel sorting, sci-fi HUD). Directions proposed in chat, awaiting the owner's pick.
 - **Material ideas the owner liked but cut for now:** a twisting ribbon (flat strip, silver reverse, flips driven by line curvature) and popcorn.
 - **Concept-doc ideas not built:** fractal mode, harmonograph, flow field, growth, phyllotaxis, girih, drift mode, share codes.
 

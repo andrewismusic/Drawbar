@@ -159,7 +159,8 @@ export function prepare(s) {
 function shapeFromBeads(s, M, beads) {
   const bw0 = beads.reduce((a, b) => a + b.r, 0) / beads.length;
   if (M.glyph) { s._shape = glyphShape(glyphCells(beads.map(b => [b.x, b.y, b.r]), s.id), bw0); return; }
-  const pieces = growPlant(M.plant, M.keys, s.id, null, beads);
+  // Dense blooms are thinned (every 2nd or 3rd bead) so a line of them stays quick to draw in every copy
+  const every = M.beadEvery || 1, pieces = growPlant(M.plant, M.keys, s.id, null, every > 1 && beads.length > 2 ? beads.filter((b, i) => i % every === 0) : beads);
   s._shape = { paths: { ...pieces, 1: pieces.all }, w0: bw0, wd: bw0, ink: null };
 }
 export function sampleArc(s, spacing) {

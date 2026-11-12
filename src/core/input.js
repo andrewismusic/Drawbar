@@ -1,7 +1,7 @@
 // Input: drawing, erasing (works through copies and tile wrap), pointer handling
 import { eraseTester, fs, tiled } from '../canvas/index.js';
 import { isVisual } from './layout.js';
-import { rebuild } from './settings.js';
+import { rebuild, strokeAdded } from './settings.js';
 import { checkpoint, redoStack, score, takeId, ui, undoStack } from './state.js';
 import { prepare, smoothStroke } from './stroke.js';
 import { TOOL, brushSize, stampRadius } from './tools.js';
@@ -64,7 +64,7 @@ export function eraseAt(p) {
 export function finishStroke(e) {
   if (erasing && e.pointerId === erasing.id) {
     if (!erasing.touched) { undoStack.pop(); redoStack.push(...erasing.redo); }
-    erasing = null; rebuild(); syncUI(); return;
+    erasing = null; rebuild(undefined, true); syncUI(); return;
   }
   if (!cur || e.pointerId !== cur.id) return;
   if (cur.stamp) { finishStamp(); return; }
@@ -78,7 +78,7 @@ export function finishStroke(e) {
   prepare(s);
   checkpoint();
   score.strokes.push(s);
-  rebuild(); syncUI();
+  strokeAdded(s); syncUI();
 }
 function finishStamp() {
   const S = sessionNow();
@@ -87,7 +87,7 @@ function finishStamp() {
   prepare(s);
   checkpoint();
   score.strokes.push(s);
-  rebuild(); syncUI();
+  strokeAdded(s); syncUI();
 }
 // Drawing and erasing on the canvas; sound starts with the first touch anywhere
 export function initInput() {

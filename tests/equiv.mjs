@@ -32,8 +32,8 @@ async function run(url) {
   await page.addInitScript(() => { performance.now = () => 1000; });
   await page.goto(url); await page.waitForTimeout(500);
   const isNew = await page.evaluate(() => typeof window.arrange !== 'function');
-  // The style tabs take some height; hide them so both builds get the same canvas size and the pixels can be compared
-  if (isNew) { await page.addStyleTag({ content: '#worldTabs{display:none!important}' }); await page.waitForTimeout(300); }
+  // The style tabs and the Sound panel's frame take some height; hide them so both builds get the same canvas size and the pixels can be compared
+  if (isNew) { await page.addStyleTag({ content: '#worldTabs{display:none!important} .knobs.sound{padding:0!important;border:0!important} .knobs .slab{display:none!important}' }); await page.waitForTimeout(300); }
   const results = [];
   for (const map of [417, 73, 908]) {
     for (const st of settings) {

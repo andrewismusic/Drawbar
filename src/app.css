@@ -141,6 +141,10 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 
 /* Knob row */
 .knobs{display:flex; justify-content:center; align-items:flex-start; gap:clamp(18px, 5vw, 44px); flex:none}
+/* The four knobs shape the music only: a labelled, outlined group with a speaker, set apart from the drawing controls */
+.knobs.sound{align-items:center; gap:clamp(10px, 3.4vw, 30px); padding:6px 16px 5px 12px; border:1px solid var(--line); border-radius:14px; background:var(--panel)}
+.knobs .slab{display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase}
+.knobs .slab svg{width:22px; height:22px}
 .kwrap{display:flex; flex-direction:column; align-items:center; gap:3px}
 .kn{position:relative; width:46px; height:46px; flex:none; touch-action:none; cursor:ns-resize; border-radius:50%}
 .kn svg{width:100%; height:100%; display:block; overflow:visible}
@@ -149,7 +153,7 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .kwrap.big{width:72px}
 .kn.big .kv{font-size:16px}
 .kl{font-size:11px; font-weight:700; color:var(--muted)}
-@media (max-width:440px){ .kn.big{width:50px; height:50px} .kn.big .kv{font-size:14px} .knobs{gap:14px} }
+@media (max-width:440px){ .kn.big{width:46px; height:46px} .kn.big .kv{font-size:13px} .knobs.sound{gap:6px; padding:5px 8px 4px 8px} .kwrap.big{width:64px} }
 
 /* Panel */
 .group{display:flex; flex-direction:column; gap:8px; min-width:0}
@@ -161,7 +165,10 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .icon.round{width:46px; height:46px; min-height:46px; border-radius:50%}
 /* Tools: a row of up to six (Geometric has five shapes and the eraser) */
 .tools{display:flex; gap:6px}
-.tools .tool{flex:1 1 0; min-width:0; max-width:54px}
+.tools .tool{flex:0 0 52px; min-width:0}
+.tool span{max-width:100%; white-space:nowrap; font-size:10px; letter-spacing:-.01em}
+/* Six tools (Geometric's shapes): slightly smaller labels so all six fit */
+.tools.many .tool span{font-size:9px}
 .tool{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; height:54px; padding:0; font-size:11px; color:var(--muted)}
 .tool svg{width:24px; height:24px}
 .tool[aria-pressed="true"]{color:var(--fg); border-color:var(--ink); background:#20253a}
@@ -181,7 +188,7 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 @media (min-width:880px) and (min-aspect-ratio:5/4){
   .group h2{display:block}
   .prow{min-height:64px}
-  .tools .tool{max-width:none}
+  .tools .tool{flex:1 1 0}
   .sizegroup{flex:none; max-width:none}
   .swatches{grid-template-columns:repeat(10, minmax(0, 1fr)); gap:4px}
   .sw{width:100%; height:auto; aspect-ratio:1; min-height:0}
