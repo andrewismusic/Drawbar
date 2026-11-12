@@ -23,9 +23,14 @@ const CASES = [
   ['geometric', 'tiles 6, 6 turns, mirror', { mode: 'tiles', tiles: 6, turns: 4, mirror: true }],
   ['glitch', 'free, mirror, smear', { mode: 'free', fmirror: true, fx: 'smear' }],
   ['glitch', 'free, mirror, blocks', { mode: 'free', fmirror: true, fx: 'blocks' }],
+  ['glitch', 'free, mirror, jitter', { mode: 'free', fmirror: true, fx: 'jitter' }],
   ['glitch', 'free, mirror, HUD', { mode: 'free', fmirror: true, fx: 'hud' }],
-  ['glitch', 'tiles 4, 2 turns, smear', { mode: 'tiles', tiles: 4, turns: 1, mirror: true, fx: 'smear' }],
-  ['glitch', 'tiles 4, 2 turns, HUD', { mode: 'tiles', tiles: 4, turns: 1, mirror: true, fx: 'hud' }],
+  ['glitch', 'tiles 3, mirror, smear', { mode: 'tiles', tiles: 3, turns: 0, mirror: true, fx: 'smear' }],
+  ['glitch', 'tiles 3, mirror, jitter', { mode: 'tiles', tiles: 3, turns: 0, mirror: true, fx: 'jitter' }],
+  ['glitch', 'AVOIDED: tiles 4, 2 turns, mirror, smear', { mode: 'tiles', tiles: 4, turns: 1, mirror: true, fx: 'smear' }, true],
+  ['space', 'free, turning, mirror', { mode: 'free', frot: true, fmirror: true }],
+  ['space', 'kaleido 8, mirror', { mode: 'kaleido', copies: 6, mirror: true }],
+  ['space', 'tiles 4, 4 turns, mirror', { mode: 'tiles', tiles: 4, turns: 3, mirror: true }],
   ['graffiti', 'free, mirror', { mode: 'free', fmirror: true }],
   ['graffiti', 'tiles 3, 2 turns, mirror', { mode: 'tiles', tiles: 3, turns: 1, mirror: true }],
   // Pairings the worlds avoid
@@ -54,7 +59,7 @@ for (const [wid, label, set, avoided, toolsOverride] of CASES.filter(c => !only 
       const pts = [], cx = Math.cos(c * 1.3) * 0.45, cy = Math.sin(c * 1.7) * 0.45;
       for (let i = 0; i < 40; i++) { const u = i / 39; pts.push([cx + 0.35 * (u - 0.5), cy + 0.12 * Math.sin(u * 7 + c), u * (0.4 + 0.05 * c), 0.5]); }
       const tool = tools[c % tools.length], kind = TOOL[tool].stamp;
-      const s = { id: 1000 + c, tool, color: w.matIdx[c % w.matIdx.length], size: 3.1, pts: kind ? stamps.stampPts(kind, cx, cy, 0.06 + 0.01 * (c % 4), c) : pts, start: 0, startBeat: 0 };
+      const s = { id: 1000 + c, tool, color: w.matIdx[c % w.matIdx.length], size: 3.1, fx: set.fx, pts: kind ? stamps.stampPts(kind, cx, cy, 0.06 + 0.01 * (c % 4), c) : pts, start: 0, startBeat: 0 };
       stroke.prepare(s); strokes.push(s);
     }
     st.score.strokes = strokes;

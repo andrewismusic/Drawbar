@@ -17,8 +17,9 @@ import { MATS } from '../styles/index.js';
 import { pixelScale, world } from '../worlds/index.js';
 import { GCELL, glyphCells, glyphShape, lineSamples } from './glyphs.js';
 import { stampPts, stampShape } from './stamps.js';
-import { blocksPass, hudOverlay, hudWires, marksTarget, releaseFx, smearPass } from './glitchfx.js';
-import { pulseEnergy } from '../sound/pulse.js';
+import { drawLive, hudOverlay } from './glitchfx.js';
+import { pulseFrame } from '../sound/pulse.js';
+import { drawSpaceBg, drawTwinkles } from './space.js';
 
 export const cv = $('cv'), ctx = cv.getContext('2d');
 export const fb = document.createElement('canvas'), fctx = fb.getContext('2d');
@@ -68,6 +69,8 @@ export const bloomW = s => 0.016 + 0.022 * Math.sqrt(s._sz);
 export function drawUnit(c, u) {
   drawShape(c, u.shape, MATS[u.color].ops);
 }
+// Still: drawn once into a cached layer. Moving tools (Loop, Ripple) and live materials (Glitch) are drawn every frame.
+const isStill = s => TOOL[s.tool].kind === 'static' && !MATS[s.color].live;
 export const bbHit = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
 // Find still strokes that newer still strokes cover completely (checked on a small mask of the drawing, copies included).
 // They are skipped when drawing; undo or erasing the stroke on top brings them straight back.
@@ -85,9 +88,9 @@ function hiddenStep(J, ms) {
   const { S, hid, cov, W, H } = J, t0 = performance.now();
   while (J.i >= 0) {
     const s = S[J.i];
-    if (TOOL[s.tool].kind !== 'static' || !s._shape) { J.i--; continue; }
+    if (!isStill(s) || !s._shape) { J.i--; continue; }
     const sh = s._shape, sil = sh.ink || sh.paths[1];
-    if (!sil) { J.i--; continue; }
+    if (!sil || sh.noHide) { J.i--; continue; }   // noHide: soft light (Space) neither hides nor is hidden
     // Two phases per stroke (test it, then add its cover), so a step can pause between them
     // Nothing above it yet covers anything: it cannot be hidden, so skip the test
     if (J.any && !J.tested) {
@@ -134,7 +137,7 @@ export function unitsOf(strokes) {
   const out = [];
   for (const s of strokes) {
     if (HIDDEN.has(s)) continue;
-    if (TOOL[s.tool].kind !== 'static') { out.push({ s }); continue; }
+    if (!isStill(s)) { out.push({ s }); continue; }
     const bb = s._bb.slice();
     out.push({ list: [s], color: s.color, tool: s.tool, bb, _bb: bb, shape: s._shape });
   }
@@ -179,7 +182,7 @@ function trimPool(list, used) {
 }
 // Leaving a tab: drop its cached layers and any re-lighting in progress, and let the next tab measure its own speed
 export function releaseCanvases() {
-  trimPool(pool, 0); trimPool(poolB, 0); releaseFx();
+  trimPool(pool, 0); trimPool(poolB, 0);
   ITEMS = []; relight = null; fade = null; groupsDirty = true;
   if (quality !== 1) { quality = 1; relayout(); }
   slowFor = fastFor = 0; frameEma = 16;
@@ -190,7 +193,7 @@ export function appendStroke(s) {
   if (groupsDirty) return;
   const M = MATS[s.color];
   if (relight) relight = null;   // a re-light in progress would miss the new stroke; it starts again by itself
-  if (TOOL[s.tool].kind !== 'static') { ITEMS.push({ s }); return; }
+  if (!isStill(s)) { ITEMS.push({ s }); return; }
   let top = ITEMS[ITEMS.length - 1];
   if (!top || !top.canvas) {
     const gi = ITEMS.filter(it => it.canvas).length;
@@ -237,7 +240,7 @@ export function renderGroups(rot = 0) {
   frameNorm(gsctx, glowS); gsctx.lineCap = 'round'; gsctx.lineJoin = 'round';
   gsctx.shadowBlur = 4;
   for (const s of score.strokes) {
-    if (TOOL[s.tool].kind !== 'static' || HIDDEN.has(s)) continue;
+    if (!isStill(s) || HIDDEN.has(s)) continue;
     const M = MATS[s.color];
     if (!M.glowA) continue;
     gsctx.globalAlpha = M.glowA; gsctx.strokeStyle = gsctx.shadowColor = M.glow; gsctx.lineWidth = bloomW(s);
@@ -367,17 +370,18 @@ export function frame(now) {
   fctx.setTransform(1, 0, 0, 1, 0, 0); fctx.clearRect(0, 0, fb.width, fb.height);
   gctx.setTransform(1, 0, 0, 1, 0, 0); gctx.clearRect(0, 0, glowC.width, glowC.height); gctx.drawImage(glowS, 0, 0);
   const fa = fade ? clamp((now - fade.t0) / 160, 0, 1) : 1;
-  const fx = fxMode(), energy = fx ? pulseEnergy(S) : null, dim = fx === 'hud' ? 0.3 : 1;   // HUD: marks dimmed under their wires
+  let pulses = null, hudAny = false;
+  const still = reduceMotion.matches;   // reduced motion: live strokes hold still
   for (let j = 0; j < ITEMS.length; j++) {
     const it = ITEMS[j];
     if (it.canvas) {
       fctx.setTransform(1, 0, 0, 1, 0, 0);
-      fctx.globalAlpha = dim;
-      if (fade && fade.old[j] && fade.old[j].canvas) { fctx.drawImage(fade.old[j].canvas, 0, 0); fctx.globalAlpha = fa * dim; }
+      if (fade && fade.old[j] && fade.old[j].canvas) { fctx.drawImage(fade.old[j].canvas, 0, 0); fctx.globalAlpha = fa; }
       fctx.drawImage(it.canvas, 0, 0); fctx.globalAlpha = 1;
       continue;
     }
     frameNorm(fctx, fb);
+    if (MATS[it.s.color].live) { pulses = pulses || pulseFrame(S); if (drawLive(fctx, it.s, still ? 0 : S, still ? 0 : B, still ? 0 : now, pulses)) hudAny = true; continue; }
     const path = drawAnim(fctx, it.s, S, B);
     if (!path) continue;
     frameNorm(gctx, glowC); gctx.lineCap = 'round';
@@ -387,8 +391,8 @@ export function frame(now) {
     forCopies(gctx, () => gctx.stroke(path), it.s);
     gctx.globalAlpha = 1;
   }
+  if (world().render.twinkle && !reduceMotion.matches) { frameNorm(fctx, fb); drawTwinkles(fctx, score.strokes, HIDDEN, S); }
   frameNorm(fctx, fb);
-  if (fx === 'hud') { hudWires(fctx, score.strokes, HIDDEN, energy); frameNorm(fctx, fb); }
   drawPreview(fctx);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
   setNorm(ctx);
@@ -396,14 +400,12 @@ export function frame(now) {
   ctx.beginPath();
   if (geo.wide) ctx.rect(-W / 2 / geo.R, -H / 2 / geo.R, W / geo.R, H / geo.R); else ctx.arc(0, 0, 1, 0, TAU);
   ctx.fillStyle = discGrad; ctx.fill(); ctx.clip();
+  if (world().render.space) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); drawSpaceBg(ctx, W, H); ctx.restore(); }
   drawGuides(B, rot);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   blitPicture(ctx, W, H, B, rot, cd, true);
-  // Glitch effects work on the finished picture, still clipped to the drawing
-  if (fx === 'smear') { blitPicture(marksTarget(W, H), W, H, B, rot, cd, false); smearPass(ctx, W, H, now, energy); }
-  else if (fx === 'blocks') { blitPicture(marksTarget(W, H), W, H, B, rot, cd, false); blocksPass(ctx, cv, W, H, now, energy); }
-  else if (fx === 'hud') hudOverlay(ctx, W, H, geo.R, now, energy);
+  if (hudAny) hudOverlay(ctx, W, H, geo.R, still ? 0 : now, pulses.drum);
   ctx.restore();
   setNorm(ctx);
   if (!geo.wide) { ctx.strokeStyle = '#262b3e'; ctx.lineWidth = 0.004; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.stroke(); }
@@ -415,12 +417,6 @@ export function frame(now) {
   if (preview && page === 'clips') { const nc = $('nowCv'), nx = nc.getContext('2d'); nx.clearRect(0, 0, 128, 128); const s = Math.min(W, H); nx.drawImage(cv, (W - s) / 2, (H - s) / 2, s, s, 0, 0, 128, 128); }
 }
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-// The Glitch effect in use, if this tab has them. With reduced motion only the HUD (which barely moves) is kept.
-function fxMode() {
-  const w = world();
-  if (!(w.options && w.options.fx)) return null;
-  return reduceMotion.matches && score.fx !== 'hud' ? null : score.fx;
-}
 // Put the composed picture (and its glow) on a screen-sized context: turned for free and kaleidoscope, tiled and
 // scrolled for tiles. c's transform is kept as the base (identity for the screen, a scale for smaller targets).
 function blitPicture(c, W, H, B, rot, cd, glow) {

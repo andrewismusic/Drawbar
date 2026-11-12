@@ -19,7 +19,7 @@ export function packState() {
   const strokes = st.strokes.map(s => {
     const a = new Int16Array(s.pts.length * 4);
     s.pts.forEach((p, i) => { a[i * 4] = clamp(Math.round(p[0] * 8000), -32767, 32767); a[i * 4 + 1] = clamp(Math.round(p[1] * 8000), -32767, 32767); a[i * 4 + 2] = clamp(Math.round(p[2] * 100), 0, 32767); a[i * 4 + 3] = Math.round((p[3] ?? 0.5) * 1000); });
-    return { i: s.id, t: s.tool, c: s.color, z: Math.round(s.size * 1000) / 1000, p: b64(new Uint8Array(a.buffer)) };
+    return { i: s.id, t: s.tool, c: s.color, z: Math.round(s.size * 1000) / 1000, f: s.fx, p: b64(new Uint8Array(a.buffer)) };
   });
   return JSON.stringify({ v: 1, set: st.set, mix: { ...mix }, strokes });
 }
@@ -28,7 +28,7 @@ export function unpackState(json) {
   const strokes = o.strokes.map(s => {
     const by = unb64(s.p), a = new Int16Array(by.buffer, by.byteOffset, by.length / 2), pts = [];
     for (let i = 0; i < a.length; i += 4) pts.push([a[i] / 8000, a[i + 1] / 8000, a[i + 2] / 100, a[i + 3] / 1000]);
-    return { id: s.i, tool: s.t, color: s.c, size: s.z, pts, start: S, startBeat: sb };
+    return { id: s.i, tool: s.t, color: s.c, size: s.z, fx: s.f, pts, start: S, startBeat: sb };
   });
   // Clips from before the style tabs belong to Classic
   if (!WORLD[o.set.world]) o.set.world = 'classic';

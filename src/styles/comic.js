@@ -8,10 +8,10 @@ export const hatch = paper => () => [INKL(-0.1), F(1, paper), CLIP, PAT('cross',
 export const drip = (c, sh) => () => [F(1, sh), CLIP, F(1, c, 0.22), S(0.5, tint(c, 0.35), 0.4, 0.45), S(0.24, '#ffffff', 0.5, 0.45, 0.75), END];
 // Flower vine: stem, leaves and petals in flat colour, no outlines (lost its comic ink in v20; now in the Garden tab).
 // Nothing is slid toward the light, so it never needs re-lighting.
-export const vine = () => [F(1, '#24611f'), F(0.6, '#4fae3e'), F(0.22, '#c9f0a8'),
-  F('leaf', '#2f8a2a'), F('leafHi', '#6cc94e'),
-  F('petA', '#ff5e9c'), F('petAHi', '#ffb3d1'), F('petB', '#ffffff'), F('petBHi', '#ffe3ee'),
-  F('ctr', '#ffcb2b'), F('ctrHi', '#fff2a8')];
+export const vine = () => [F(1, '#127a6b'), F(0.6, '#1fd1b2'), F(0.22, '#b6fff0'),
+  F('leaf', '#19b89a'), F('leafHi', '#7dffe0'),
+  F('petA', '#ff3fb4'), F('petAHi', '#ffb3e3'), F('petB', '#ffe14d'), F('petBHi', '#fff6b8'),
+  F('ctr', '#7a5cff'), F('ctrHi', '#c9b8ff')];
 
 export const comics = [['Comic red', '#ee3b3f', '#c4202f', '#7e0f22', '#f2717a'], ['Comic yellow', '#ffcb2b', '#f39a1c', '#b45a0c', '#ffe08a'], ['Comic blue', '#3ea4ea', '#2470c4', '#123c7c', '#7cc4f2']].map(([name, c, sh, dk, rim]) => ({
   name, accent: c, glow: c, glowA: 0, make: comic(c, sh, dk, rim), comic: true,
@@ -23,5 +23,5 @@ export const inkHatch = { name: 'Ink hatch', accent: '#f4efe2', glow: '#fff', gl
 export const drips = [['Drip magenta', '#d83c9e', '#8c1c68'], ['Drip violet', '#7d5ce0', '#43309a']].map(([name, c, sh]) => ({
   name, accent: c, glow: c, glowA: 0, make: drip(c, sh), drip: true,
   swatch: `radial-gradient(circle at 36% 30%, #fff 0 9%, transparent 10%), radial-gradient(ellipse 30% 60% at 62% 82%, ${c} 0 60%, transparent 62%), radial-gradient(circle at 46% 40%, ${c} 0 42%, ${sh} 43% 55%, #0c0c12 57%)` }));
-export const flowerVine = { name: 'Flower vine', accent: '#f27aa8', glow: '#f27aa8', glowA: 0, make: vine, extra: 'vine', reach: 0.03,
+export const flowerVine = { name: 'Flower vine', accent: '#ff3fb4', glow: '#1fd1b2', glowA: 0.22, make: vine, extra: 'vine', reach: 0.03,
   swatch: 'radial-gradient(circle at 50% 50%, #f2b01e 0 12%, transparent 13%), radial-gradient(circle at 50% 28%, #f27aa8 0 16%, transparent 17%), radial-gradient(circle at 71% 46%, #f27aa8 0 16%, transparent 17%), radial-gradient(circle at 63% 72%, #f27aa8 0 16%, transparent 17%), radial-gradient(circle at 37% 72%, #f27aa8 0 16%, transparent 17%), radial-gradient(circle at 29% 46%, #f27aa8 0 16%, transparent 17%), radial-gradient(circle, #3a8028 0 60%, #2e5a1e 70%)' };

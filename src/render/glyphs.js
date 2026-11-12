@@ -5,10 +5,11 @@ import { hash32 } from '../core/math.js';
 
 export const GCELL = 0.045;   // grid size, in drawing units (the disc's radius is 1)
 const GLYPHS = 'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789:=+*<>|';
-const SZ = 32, COLS = 8;
-const LEVELS = [0.5, 0.78, 1];
+export const SZ = 32, COLS = 8;
+export const LEVELS = [0.5, 0.78, 1];
+export const NGLYPH = Math.min(GLYPHS.length, COLS * COLS);
 const sheets = new Map();
-function sheet(color) {
+export function sheet(color) {
   let c = sheets.get(color);
   if (c) return c;
   c = document.createElement('canvas'); c.width = c.height = SZ * COLS;

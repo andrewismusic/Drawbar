@@ -164,7 +164,7 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .prow .kwrap{width:48px}
 .icon.round{width:46px; height:46px; min-height:46px; border-radius:50%}
 .seg.fx{align-self:flex-start}
-.seg.fx button{min-height:32px; padding:0 12px; font-size:13px}
+.seg.fx button{min-height:32px; padding:0 9px; font-size:13px}
 /* Tools: a row of up to six (Geometric has five shapes and the eraser) */
 .tools{display:flex; gap:6px}
 .tools .tool{flex:0 0 52px; min-width:0}

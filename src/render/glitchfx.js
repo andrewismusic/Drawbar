@@ -1,145 +1,178 @@
-// Glitch effects: three ways of corrupting the finished picture, chosen with the Effect buttons (score.fx).
-//   smear:  rows of the picture drag sideways and leave decaying trails with red / cyan fringes
-//   blocks: datamosh. Blocks slip, repeat, stretch into streaks and flip colour
-//   hud:    marks become nodes joined by thin lines, under rings, ticks, a sweep and read-outs
-// All three cost about the same every frame however much is drawn (a fixed number of image copies or lines), and all
-// react a little to the music through pulseEnergy (notes widen smears, drum hits add blocks). Visual only.
-import { TAU, hash32 } from '../core/math.js';
-import { animEventIdx } from '../core/stroke.js';
+// Glitch strokes. Every stroke in the Glitch tab is drawn afresh each frame (they all move), in one of two looks:
+//   wire brushes: a chain of slowly tumbling 3D wireframe solids along the line (tetrahedra to dodecahedra)
+//   code brushes: glyph cells on a grid whose characters keep being replaced, each cell at its own pace
+// Each stroke carries its own effect (s.fx, the Effect button chosen when it was drawn) with its own seeded
+// settings (direction, reach, pace...), so two strokes with the same effect still behave differently:
+//   smear:  fading copies trail off to one side, with red / cyan fringes
+//   blocks: datamosh. Pieces of the stroke slip sideways, some in flipped colour
+//   jitter: each solid or cell jumps out of place and changes size, holding for a moment, now and then by a lot
+//   hud:    the stroke dims under nodes on a thin line with a ring at its start
+// All of it is thin lines or small image copies, in the drawing's own space (so copies and tiles just work). Each
+// stroke pulses with its own notes (pulseFrame), and drum hits nudge them all. Visual only.
+import { TAU, hash32, mulberry32, mod, clamp } from '../core/math.js';
+import { score } from '../core/state.js';
+import { animEventIdx, NEON_W } from '../core/stroke.js';
 import { forCopies } from '../canvas/index.js';
 import { MATS } from '../styles/index.js';
+import { GCELL, glyphCells, lineSamples, sheet, SZ, COLS, NGLYPH, LEVELS } from './glyphs.js';
 
-const mk = document.createElement('canvas'), mkx = mk.getContext('2d');       // this frame's marks only, half size
-const acc = document.createElement('canvas'), ax = acc.getContext('2d');      // the smear: marks plus their trails
-const tr = document.createElement('canvas'), trx = tr.getContext('2d');       // trails tinted red / cyan for the fringe
 const frac = r => (r % 10000) / 10000;
-function fit(W, H) {
-  const w = Math.max(8, W >> 1), h = Math.max(8, H >> 1);
-  if (mk.width === w && mk.height === h) return;
-  for (const c of [mk, acc, tr]) { c.width = w; c.height = h; }
-  ax.fillStyle = '#000'; ax.fillRect(0, 0, w, h);
+// ----- The solids: unit-radius corners, and edges found as the closest pairs -----
+const PHI = (1 + Math.sqrt(5)) / 2;
+function solid(seeds, cyclic) {
+  const V = [];
+  for (const [a, b, c] of seeds) for (const p of cyclic ? [[a, b, c], [c, a, b], [b, c, a]] : [[a, b, c]])
+    for (let m = 0; m < 8; m++) { const v = p.map((x, i) => (m >> i & 1) ? -x : x); if (!V.some(q => q.every((x, i) => Math.abs(x - v[i]) < 1e-9))) V.push(v); }
+  const R = Math.hypot(...V[0]); V.forEach(v => v.forEach((x, i) => v[i] = x / R));
+  let dmin = 9; const D = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  for (let i = 0; i < V.length; i++) for (let j = i + 1; j < V.length; j++) dmin = Math.min(dmin, D(V[i], V[j]));
+  const E = [];
+  for (let i = 0; i < V.length; i++) for (let j = i + 1; j < V.length; j++) if (D(V[i], V[j]) < dmin * 1.01) E.push([i, j]);
+  return { V, E };
 }
-// Leaving the Glitch tab: give the buffers' memory back
-export function releaseFx() { for (const c of [mk, acc, tr]) c.width = c.height = 0; }
-// Where compose.js draws this frame's marks (no background) for the smear to feed on
-export function marksTarget(W, H) {
-  fit(W, H);
-  mkx.setTransform(1, 0, 0, 1, 0, 0); mkx.clearRect(0, 0, mk.width, mk.height);
-  mkx.setTransform(mk.width / W, 0, 0, mk.height / H, 0, 0);
-  return mkx;
-}
-// ctx is already clipped to the drawing. e: { tone, drum } energy.
-export function smearPass(ctx, W, H, now, e) {
-  const w = acc.width, h = acc.height;
-  // 1. Fade the old trails, then drag bands of rows sideways (the band layout changes every second or so)
-  ax.globalCompositeOperation = 'source-over'; ax.globalAlpha = 1;
-  ax.fillStyle = 'rgba(0,0,0,0.09)'; ax.fillRect(0, 0, w, h);
-  const slot = Math.floor(now / 1100), push = 1 + 1.6 * e.tone + 1.2 * e.drum;
-  for (let y = 0, i = 0; y < h; i++) {
-    const r = hash32(slot, i, 41), bh = 3 + Math.floor(frac(r) * h * 0.07), kind = (r >>> 14) % 10;
-    if (kind >= 4) { const dx = ((r >>> 20) & 1 ? 1 : -1) * (2 + frac(r >>> 7) * 9) * push; ax.drawImage(acc, 0, y, w, bh, dx, y, w, bh); }
-    y += bh;
-  }
-  // 2. Trails only (this frame's marks cut out), tinted red and cyan and laid back a little apart: the colour fringe
-  const split = (1.5 + 5 * e.tone + 3 * e.drum) * W / 700;
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'lighter';
-  for (const [tint, dx] of [['#ff2040', -split], ['#00e0ff', split]]) {
-    trx.setTransform(1, 0, 0, 1, 0, 0); trx.globalCompositeOperation = 'source-over'; trx.globalAlpha = 1;
-    trx.drawImage(acc, 0, 0);
-    trx.globalCompositeOperation = 'destination-out'; trx.drawImage(mk, 0, 0);
-    trx.globalCompositeOperation = 'destination-over'; trx.fillStyle = '#000'; trx.fillRect(0, 0, w, h);
-    trx.globalCompositeOperation = 'multiply'; trx.fillStyle = tint; trx.fillRect(0, 0, w, h);
-    ctx.drawImage(tr, dx, 0, W, H);
-  }
-  ctx.globalCompositeOperation = 'source-over';
-  // 3. Scan lines over everything, then feed this frame's marks into the smear for next time
-  ctx.fillStyle = scanPattern(ctx); ctx.globalAlpha = 0.5; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1;
-  ax.drawImage(mk, 0, 0);
-}
-let scanTile = null;
-function scanPattern(ctx) {
-  if (!scanTile) { scanTile = document.createElement('canvas'); scanTile.width = 4; scanTile.height = 4; const g = scanTile.getContext('2d'); g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, 0, 4, 1.5); }
-  return ctx.createPattern(scanTile, 'repeat');
-}
-// Datamosh: pieces of the marks (never the empty background) slip sideways, stretch into streaks, repeat and ghost in
-// flipped colours. Each piece lives for a few ticks, so the picture holds its broken shape, then re-breaks. Drum hits
-// add short-lived pieces and tear whole rows. Pieces are taken from the half-size marks buffer, so they come out chunky.
-export function blocksPass(ctx, cv, W, H, now, e) {
-  const w = mk.width, h = mk.height, g = Math.max(6, Math.round(w / 20)), cols = Math.ceil(w / g), rows = Math.ceil(h / g), slot = Math.floor(now / 170);
-  const base = 34, n = base + Math.round(26 * e.drum + 12 * e.tone), k = W / w;
-  ctx.setTransform(k, 0, 0, H / h, 0, 0); ctx.imageSmoothingEnabled = false;
-  for (let i = 0; i < n; i++) {
-    const life = i < base ? 3 + (i % 5) * 2 : 1, r = hash32(Math.floor(slot / life), i, 67), r2 = hash32(r, 5);
-    const bw = (1 + r % 5) * g, bh = Math.max(3, (1 + (r >>> 4) % 2) * (r2 % 3 === 0 ? g / 2 : g)), x = ((r >>> 8) % cols) * g, y = ((r >>> 14) % rows) * g, kind = (r >>> 20) % 8;
-    const to = x + (((r2 >>> 3) % 9) - 4) * g;
-    if (kind < 3) ctx.drawImage(mk, x, y, bw, bh, to, y, bw, bh);                                  // slip
-    else if (kind < 5) ctx.drawImage(mk, x + bw / 2, y, 1, bh, x - bw, y, bw * 3, bh);             // streak: one column pulled wide
-    else if (kind === 5) { const pw = Math.max(2, bw / 4); for (let j = 1; j < 5; j++) ctx.drawImage(mk, x, y, pw, bh, x + j * pw, y, pw, bh); }   // repeat
-    else {                                                                                          // ghost in flipped colours
-      ctx.globalCompositeOperation = kind === 6 ? 'difference' : 'lighter'; ctx.globalAlpha = 0.9;
-      ctx.drawImage(mk, x, y, bw, bh, to, y + (r2 % 3 - 1) * g, bw, bh);
-      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+const SOLIDS = {
+  tetra: { V: [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]].map(v => v.map(x => x / Math.sqrt(3))), E: [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]] },
+  cube: solid([[1, 1, 1]]),
+  octa: solid([[1, 0, 0]], true),
+  icosa: solid([[0, 1, PHI]], true),
+  dodeca: solid([[1, 1, 1], [0, 1 / PHI, PHI]], true),
+};
+
+// Per-stroke set-up, once: the effect's seeded settings, and where the solids sit along the line
+function setup(s) {
+  const M = MATS[s.color], r = mulberry32(hash32(s.id, 911)), n = s.pts.length, L = s._L;
+  const g = { fx: s.fx || 'smear', dir: r() < 0.5 ? -1 : 1, reach: 0.5 + r(), split: 0.5 + r(), rate: 0.5 + 1.5 * r(), hold: 2 + Math.floor(r() * 5), amt: 0.5 + r(), seed: hash32(s.id, 77) };
+  if (M.wire) {
+    const base = NEON_W * s._sz * (s.tool === 'beads' ? 1.6 : 2.8), gap = Math.max(base * 2.3, s._len / 9);   // at most about 9 solids a stroke
+    g.els = []; g.lw = clamp(base * 0.085, 0.0022, 0.006);
+    let next = 0;
+    for (let i = 0; i < n; i++) {
+      if (L[i] < next && !(i === n - 1 && !g.els.length)) continue;
+      g.els.push({ i, x: s._xs[i], y: s._ys[i], R: base * (0.7 + 0.6 * r()), a: [r() * TAU, r() * TAU], w: [(r() - 0.5) * 2.6, (r() - 0.5) * 2.6], t: s.pts[i][2] });
+      next = L[i] + gap;
     }
   }
-  // Whole bands of rows break too, so every mark gets hit somewhere: ghosts slipped sideways, colour-flipped ghosts,
-  // mosaic (the band shrunk and blown back up into big pixels) and streaks pulled from one column
-  for (let y = 0, i = 0; y < h; i++) {
-    const life = 4 + (i % 4) * 3, r = hash32(Math.floor(slot / life), i, 83), bh = Math.max(3, Math.round(g * (0.4 + 1.4 * frac(r)))), kind = (r >>> 14) % 10;
-    const dx = (frac(r >>> 6) - 0.5) * w * 0.3 * (1 + 0.6 * e.tone);
-    if (kind === 4 || kind === 5) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.85; ctx.drawImage(mk, 0, y, w, bh, dx, y, w, bh); }
-    else if (kind === 6) { ctx.globalCompositeOperation = 'difference'; ctx.drawImage(mk, 0, y, w, bh, dx, y, w, bh); }
-    else if (kind === 7 || kind === 8) {
-      const cw = Math.max(4, Math.round(w / (g * 0.8))), ch = Math.max(1, Math.round(bh / (g * 0.8)));
-      trx.setTransform(1, 0, 0, 1, 0, 0); trx.globalCompositeOperation = 'copy'; trx.imageSmoothingEnabled = true;
-      trx.drawImage(mk, 0, y, w, bh, 0, 0, cw, ch);
-      ctx.drawImage(tr, 0, 0, cw, ch, dx * 0.3, y, w, bh);
-    } else if (kind === 9) { const x0 = Math.floor(frac(r >>> 3) * w * 0.8); ctx.drawImage(mk, x0, y, 1, bh, x0, y, w - x0, bh); }
-    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-    y += bh;
-  }
-  // Row tears on drum hits: thin full-width bands of the screen knocked sideways
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const tears = Math.round(3 * e.drum);
-  for (let i = 0; i < tears; i++) { const r = hash32(slot, i, 9), y = Math.floor(frac(r) * H), bh = Math.max(2, Math.floor(frac(r >>> 9) * H * 0.05)); ctx.drawImage(cv, 0, y, W, bh, (frac(r >>> 5) - 0.5) * W * 0.12, y, W, bh); }
-  ctx.imageSmoothingEnabled = true;
+  const b = s._bb, pad = 0.12;
+  g.bb = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
+  return s._gl = g;
 }
-// HUD, part 1 (in the drawing's own space, before copies are composed): every mark's key points become nodes joined
-// by a thin line, with a ring at its start; neighbouring marks are linked. X is the frame buffer's context.
-let linkKey = '', links = [];
-export function hudWires(X, strokes, hidden, e) {
-  const S = strokes.filter(s => !hidden.has(s));
-  for (const s of S) if (!s._hud) s._hud = animEventIdx(s).map(i => [s.pts[i][0], s.pts[i][1]]);
-  const key = S.length + ':' + (S.length ? S[S.length - 1].id : 0);
-  if (key !== linkKey) {
-    linkKey = key; links = [];
-    for (let i = 1; i < S.length; i++) for (const back of [1, 3]) {
-      const a = S[i]._hud[back === 1 ? 0 : S[i]._hud.length - 1], T = S[i - back];
-      if (!T) continue;
-      let best = T._hud[0], bd = 1e9;
-      for (const q of T._hud) { const d = Math.hypot(q[0] - a[0], q[1] - a[1]); if (d < bd) { bd = d; best = q; } }
-      links.push([a, best]);
+// Loop strokes are revealed along their length in time with the music; Ripple strokes sway
+function reveal(s, S, B) {
+  if (s.tool !== 'loop') return Infinity;
+  const ph = score.timing === 'clocked' ? mod((B - s.startBeat) / (s._Pb || 4), 1) : mod((S - s.start) / s._dur, 1);
+  return ph * s._dur;
+}
+function sway(s, i, S) {
+  if (s.tool !== 'ripple') return 0;
+  const u = s._L[i] / Math.max(s._len, 1e-4);
+  return 0.006 * s._sz * s._amp[i] * Math.sin(Math.PI * u) * Math.sin(TAU * (u * s._waves - s._rate * S));
+}
+// This frame's wireframes as one path
+function wirePath(s, g, S, T, slot, e) {
+  const P = new Path2D(), { V, E } = SOLIDS[MATS[s.color].wire], pts = new Array(V.length);
+  for (const el of g.els) {
+    if (el.t > T) continue;
+    const off = sway(s, el.i, S);
+    let x = el.x + s._nx[el.i] * off, y = el.y + s._ny[el.i] * off, R = el.R * (1 + 0.25 * e);
+    if (g.fx === 'jitter') {
+      const h = hash32(g.seed, el.i, Math.floor(slot / (1 + (el.i + g.hold) % 4))), big = h % 6 === 0, k = g.amt * (1 + e);
+      x += (frac(h) - 0.5) * R * (big ? 5 : 1.4) * k; y += (frac(h >>> 8) - 0.5) * R * (big ? 3.5 : 1.2) * k;
+      R *= big ? 0.35 + 2.4 * frac(h >>> 16) : 0.7 + 0.7 * frac(h >>> 16);
     }
+    const ay = el.a[0] + el.w[0] * S, ax = el.a[1] + el.w[1] * S, cy = Math.cos(ay), sy = Math.sin(ay), cx = Math.cos(ax), sx = Math.sin(ax);
+    for (let k = 0; k < V.length; k++) {
+      const v = V[k], x1 = v[0] * cy + v[2] * sy, z1 = -v[0] * sy + v[2] * cy, y2 = v[1] * cx - z1 * sx, z2 = v[1] * sx + z1 * cx, p = 1 / (1 - z2 * 0.28);
+      pts[k] = [x + x1 * R * p, y + y2 * R * p];
+    }
+    for (const [a, b] of E) { P.moveTo(pts[a][0], pts[a][1]); P.lineTo(pts[b][0], pts[b][1]); }
   }
-  X.lineJoin = 'round'; X.lineCap = 'round';
-  X.strokeStyle = 'rgba(220,240,255,0.32)'; X.lineWidth = 0.0025; X.beginPath();
-  for (const [a, b] of links) { X.moveTo(a[0], a[1]); X.lineTo(b[0], b[1]); }
-  forCopies(X, () => X.stroke(), null);
-  const nr = 0.007 * (1 + 0.9 * Math.min(e.tone + e.drum, 1.2));
-  for (const s of S) {
-    const c = MATS[s.color].accent, N = s._hud;
-    forCopies(X, () => {
-      X.strokeStyle = c; X.lineWidth = 0.004; X.globalAlpha = 0.95;
-      X.beginPath(); X.moveTo(N[0][0], N[0][1]); for (let i = 1; i < N.length; i++) X.lineTo(N[i][0], N[i][1]); X.stroke();
-      X.lineWidth = 0.003; X.globalAlpha = 0.7; X.beginPath(); X.arc(N[0][0], N[0][1], 0.03, 0, TAU); X.stroke();
-      X.globalAlpha = 1; X.fillStyle = '#ffffff';
-      for (const q of N) X.fillRect(q[0] - nr, q[1] - nr, nr * 2, nr * 2);
-    }, s);
-  }
-  X.globalAlpha = 1;
+  return P;
 }
-// HUD, part 2 (on screen): rings with turning arcs, rim ticks, a sweep, a scan line and read-outs
-export function hudOverlay(ctx, W, H, R, now, e) {
-  const cx = W / 2, cy = H / 2, t = now / 1000, glow = 0.3 + 0.35 * Math.min(e.tone + e.drum, 1), u = R / 300;
+// This frame's glyph cells (static strokes keep theirs; loops and ripples re-read the grid as they move)
+function liveCells(s, S, T) {
+  if (s.tool === 'glow' || s.tool === 'beads') return s._shape.cells;
+  const n = s.pts.length;
+  if (s.tool === 'loop') {
+    let iT = 0;
+    while (iT < n - 1 && s.pts[iT + 1][2] <= T) iT++;
+    if (iT < 1) return [];
+    const smp = lineSamples(s._xs, s._ys, s._w, iT, s._L);
+    return glyphCells(smp, s.id, smp.length - 3);
+  }
+  for (let i = 0; i < n; i++) { const off = sway(s, i, S); s._rx[i] = s._xs[i] + s._nx[i] * off; s._ry[i] = s._ys[i] + s._ny[i] * off; }
+  return glyphCells(lineSamples(s._rx, s._ry, s._w, n - 1, s._L), s.id);
+}
+function drawCells(X, cells, g, color, S, slot, e, dx, dy, alpha) {
+  const sh = sheet(color), head = sheet('#f2fff6'), G = GCELL;
+  for (const [x0, y0, gi, lv, hd] of cells) {
+    // Characters are replaced over time: some cells never change, some tick slowly, some flicker
+    const h = hash32(Math.round(x0 * 1000), Math.round(y0 * 1000), g.seed), pace = h % 10, rate = pace < 3 ? 0 : pace < 8 ? 0.6 + frac(h >>> 5) * 2.4 : 6 + frac(h >>> 5) * 9;
+    const ch = (gi + Math.floor(S * rate * g.rate + (h >>> 12) % 7)) % NGLYPH;
+    let x = x0 + dx, y = y0 + dy, k = G;
+    if (g.fx === 'jitter') {
+      const j = hash32(h, Math.floor(slot / (1 + pace % 4))), big = j % 7 === 0, a = g.amt * (1 + e);
+      x += Math.round((frac(j) - 0.5) * (big ? 6 : 1.6) * a) * G; y += Math.round((frac(j >>> 8) - 0.5) * (big ? 3 : 0.8) * a) * G;
+      k = G * (big ? 1 + Math.floor(frac(j >>> 16) * 3) : 1);
+    }
+    X.globalAlpha = alpha * (hd ? 1 : LEVELS[lv]);
+    X.drawImage(hd ? head : sh, (ch % COLS) * SZ, Math.floor(ch / COLS) * SZ, SZ, SZ, x, y, k, k);
+  }
+}
+const FLIP = ['#00e5ff', '#ff2bd6', '#fff35c', '#ffffff'];
+// Draw one live stroke. X: the frame buffer's context, in drawing space. P: { drum, by } from pulseFrame.
+// Returns true if the stroke uses the HUD effect (so the screen can add its rings and read-outs).
+export function drawLive(X, s, S, B, now, P) {
+  const M = MATS[s.color], g = s._gl || setup(s), e = Math.min((P.by.get(s.id) || 0) + 0.5 * P.drum, 1.5);
+  const slot = Math.floor(now / 170), T = reveal(s, S, B), c = M.accent, tiles = score.mode === 'tiles';
+  let pass;
+  if (M.wire) {
+    const path = wirePath(s, g, S, T, slot, e);
+    X.lineWidth = g.lw; X.lineJoin = 'bevel'; X.lineCap = 'butt';   // plain line ends: the cheapest to draw
+    pass = (dx, dy, a, col, op) => { X.globalAlpha = a; X.globalCompositeOperation = op || 'source-over'; X.strokeStyle = col || c; X.translate(dx, dy); X.stroke(path); X.translate(-dx, -dy); };
+  } else {
+    const cells = liveCells(s, S, T);
+    pass = (dx, dy, a, col, op) => { X.globalCompositeOperation = op || 'source-over'; drawCells(X, cells, g, col || c, S, slot, e, dx, dy, a); };
+  }
+  forCopies(X, () => {
+    if (g.fx === 'smear') {
+      // Fewer trail copies where each one costs more: glyphs (an image copy per cell) and tiles (many copies of everything)
+      const n = tiles ? (M.wire ? 1 : 0) : 2, osc = 0.5 + 0.5 * Math.sin(now / 1000 * g.rate + g.seed % 7), step = 0.011 * g.reach * (0.35 + osc + 1.6 * e) * g.dir;
+      for (let k = n; k >= 1; k--) pass(step * k * (5 / (n + 2)), 0, (1 - k / (n + 1)) * 0.5, c);
+      const sp = 0.004 * g.split * (1 + 2.5 * e);
+      // Fringes are plain copies under the main one (additive blending cost a dropped frame in the test)
+      pass(-sp, 0, 0.85, '#ff2040'); pass(sp, 0, 0.85, '#00e0ff'); pass(0, 0, 1, c);
+    } else if (g.fx === 'blocks') {
+      pass(0, 0, 1, c);
+      const b = g.bb, bw = b[2] - b[0], bh = b[3] - b[1];
+      for (let i = 0, nb = (tiles ? 2 : 4) + Math.round(3 * e); i < nb; i++) {
+        const h = hash32(g.seed, i, Math.floor(slot / (g.hold + i))), rw = bw * (0.15 + 0.3 * frac(h)), rh = Math.max(0.02, bh * (0.08 + 0.25 * frac(h >>> 6)));
+        const rx = b[0] + (bw - rw) * frac(h >>> 11), ry = b[1] + (bh - rh) * frac(h >>> 16), dx = (frac(h >>> 3) - 0.5) * 0.3 * g.reach;
+        X.save(); X.beginPath(); X.rect(rx + dx, ry, rw, rh); X.clip();
+        pass(dx, 0, 1, h % 3 === 0 ? FLIP[h % FLIP.length] : c);
+        X.restore();
+        if (h % 5 === 0) { X.globalAlpha = 0.2; X.fillStyle = c; X.fillRect(rx + dx, ry, rw, rh * 0.35); }
+      }
+    } else if (g.fx === 'jitter') {
+      pass(0.004 * g.dir, 0.002, 0.45, '#00e0ff'); pass(0, 0, 1, c);
+    } else {
+      pass(0, 0, 0.4, c);
+      const N = (s._hud || (s._hud = animEventIdx(s).map(i => [s.pts[i][0], s.pts[i][1], s.pts[i][2]]))).filter(q => q[2] <= T), nr = 0.007 * (1 + 0.9 * Math.min(e, 1.2));
+      if (N.length) {
+        X.globalCompositeOperation = 'source-over'; X.strokeStyle = c; X.lineWidth = 0.004; X.globalAlpha = 0.95;
+        X.beginPath(); X.moveTo(N[0][0], N[0][1]); for (let i = 1; i < N.length; i++) X.lineTo(N[i][0], N[i][1]); X.stroke();
+        X.lineWidth = 0.003; X.globalAlpha = 0.7; X.beginPath(); X.arc(N[0][0], N[0][1], 0.03, 0, TAU); X.stroke();
+        X.globalAlpha = 1; X.fillStyle = '#ffffff';
+        for (const q of N) X.fillRect(q[0] - nr, q[1] - nr, nr * 2, nr * 2);
+      }
+    }
+    X.globalAlpha = 1; X.globalCompositeOperation = 'source-over';
+  }, { _bb: g.bb });
+  return g.fx === 'hud';
+}
+// HUD dressing on screen, shown while any stroke uses the HUD effect: rings with turning arcs, rim ticks, a sweep,
+// a scan line and read-outs
+export function hudOverlay(ctx, W, H, R, now, drum) {
+  const cx = W / 2, cy = H / 2, t = now / 1000, glow = 0.3 + 0.35 * Math.min(drum, 1), u = R / 300;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.strokeStyle = '#35e6ff'; ctx.fillStyle = '#35e6ff'; ctx.lineWidth = Math.max(1, u);
   ctx.globalAlpha = 0.16;
@@ -149,14 +182,11 @@ export function hudOverlay(ctx, W, H, R, now, e) {
   ctx.globalAlpha = 0.3; ctx.lineWidth = Math.max(1, u); ctx.beginPath();
   for (let i = 0; i < 72; i++) { const a = TAU * i / 72, r0 = R * (i % 6 ? 0.965 : 0.94); ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); ctx.lineTo(cx + Math.cos(a) * R * 0.985, cy + Math.sin(a) * R * 0.985); }
   ctx.stroke();
-  // Sweep: a faint wedge and its leading line
   const sa = t * 0.9;
   ctx.globalAlpha = 0.07; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R * 0.9, sa - 0.5, sa); ctx.closePath(); ctx.fill();
   ctx.globalAlpha = 0.4; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(sa) * R * 0.9, cy + Math.sin(sa) * R * 0.9); ctx.stroke();
-  // Scan line drifting down
   const sy = cy - R + ((t * 0.11) % 1) * 2 * R;
   ctx.globalAlpha = 0.14; ctx.fillRect(cx - R, sy, 2 * R, Math.max(1, 1.5 * u));
-  // Read-outs: numbers that tick over a few times a second
   ctx.globalAlpha = 0.55; ctx.font = `${Math.round(9 * u + 3)}px ui-monospace, Menlo, Consolas, monospace`; ctx.textBaseline = 'middle';
   const tick = Math.floor(now / 380);
   [[-0.66, -0.6], [0.42, -0.66], [-0.7, 0.58], [0.4, 0.64]].forEach(([px, py], i) => {

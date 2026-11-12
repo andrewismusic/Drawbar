@@ -10,6 +10,7 @@ import { stampPts } from '../render/stamps.js';
 import { audioReady, beatAt, playing, rotAt, scrollAt, sessionNow, startAudio, visNow } from './transport.js';
 import { syncUI } from './ui.js';
 import { cv, geo, redrawSoon } from '../render/compose.js';
+import { MATS } from '../styles/index.js';
 
 export let cur = null, erasing = null;
 export function toScreen(e) {
@@ -51,7 +52,7 @@ export function eraseAt(p) {
       for (let i = 1; i < run.length; i++) rl += Math.hypot(run[i][0] - run[i - 1][0], run[i][1] - run[i - 1][1]);
       if (run.length >= 3 && rl > 0.025) {
         const t0 = run[0][2];
-        const piece = { id: next.some(x => x.id === s.id) ? takeId() : s.id, tool: s.tool, color: s.color, size: s.size, pts: run.map(q => [q[0], q[1], q[2] - t0, q[3]]), start: s.start, startBeat: s.startBeat };
+        const piece = { id: next.some(x => x.id === s.id) ? takeId() : s.id, tool: s.tool, color: s.color, size: s.size, fx: s.fx, pts: run.map(q => [q[0], q[1], q[2] - t0, q[3]]), start: s.start, startBeat: s.startBeat };
         prepare(piece); next.push(piece);
       }
       run = [];
@@ -73,7 +74,7 @@ export function finishStroke(e) {
   if (Math.hypot(p.x - last[0], p.y - last[1]) > 0.002) cur.pts.push([p.x, p.y, t, pressureOf(e)]);
   const pts = cur.pts.length > 2 ? smoothStroke(cur.pts, cur.size) : cur.pts;
   const S = sessionNow();
-  const s = { id: takeId(), tool: cur.tool, color: cur.color, size: cur.size, pts, start: S, startBeat: Math.ceil(beatAt(S)) };
+  const s = { id: takeId(), tool: cur.tool, color: cur.color, size: cur.size, fx: MATS[cur.color].live ? score.fx : undefined, pts, start: S, startBeat: Math.ceil(beatAt(S)) };
   cur = null;
   prepare(s);
   checkpoint();

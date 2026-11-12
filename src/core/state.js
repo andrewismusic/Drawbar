@@ -13,6 +13,6 @@ export const undoStack = [], redoStack = [];
 export const SET_KEYS = ['map', 'key', 'scale', 'tempo', 'mode', 'copies', 'spiral', 'tiles', 'turns', 'mirror', 'fscale', 'frot', 'fmirror', 'timing', 'inst', 'world', 'pixel', 'fx'];
 export const snap = () => ({
   set: Object.fromEntries(SET_KEYS.map(k => [k, score[k]])),
-  strokes: score.strokes.map(s => ({ id: s.id, tool: s.tool, color: s.color, size: s.size, pts: s.pts.map(p => p.slice()), start: s.start, startBeat: s.startBeat })),
+  strokes: score.strokes.map(s => ({ id: s.id, tool: s.tool, color: s.color, size: s.size, fx: s.fx, pts: s.pts.map(p => p.slice()), start: s.start, startBeat: s.startBeat })),
 });
 export function checkpoint() { undoStack.push(snap()); redoStack.length = 0; if (undoStack.length > 120) undoStack.shift(); }

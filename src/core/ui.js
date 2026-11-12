@@ -118,7 +118,7 @@ export function initControls() {
     $('modeSeg').appendChild(b);
   });
   $('modeSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.mode) change(() => score.mode = v); });
-  $('fxSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.fx) change(() => score.fx = v); });
+  $('fxSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.fx) { score.fx = v; syncUI(); } });   // applies to the strokes drawn next
   $('timeSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.timing) change(() => score.timing = v); });
   $('instSeg').addEventListener('click', e => { const v = e.target.closest('button')?.dataset.v; if (v && v !== score.inst) change(() => score.inst = v); });
   $('mirrorBtn').addEventListener('click', () => change(() => { if (score.mode === 'free') score.fmirror = !score.fmirror; else score.mirror = !score.mirror; }));

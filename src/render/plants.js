@@ -1,162 +1,157 @@
-// Garden plants: each plant brush grows keyed pieces (leaves, petals, berries, blades...) along the drawn line, or,
-// with Beads, one bloom or clump at each bead. Built once per stroke in the stroke's own space, seeded by the stroke's
-// id, so the same drawing always grows the same garden. Flat colour, no outlines, nothing lit: no re-lighting needed.
+// Garden plants (magical: glowing fungi, fruit and strange flowers). Each brush sprouts stalks from the drawn line
+// with a head at the tip; with Beads, each bead becomes one head. Built once per stroke in the stroke's own space,
+// seeded by the stroke's id, so the same drawing always grows the same garden. Flat colour pieces keyed by name
+// (see styles/garden.js for their colours), no outlines, nothing lit: no re-lighting needed.
 import { TAU, mulberry32, hash32 } from '../core/math.js';
 
-// ----- Path helpers -----
-const circ = (P, x, y, r) => { P.moveTo(x + r, y); P.arc(x, y, r, 0, TAU); };
-const ell = (P, x, y, rx, ry, rot) => { P.moveTo(x + rx * Math.cos(rot), y + rx * Math.sin(rot)); P.ellipse(x, y, rx, ry, rot, 0, TAU); };
-// A leaf from (x, y) pointing along ang: two curves meeting at the tip
-function leaf(P, x, y, ang, len, wid) {
-  const ux = Math.cos(ang), uy = Math.sin(ang), px = -uy, py = ux, ex = x + ux * len, ey = y + uy * len, mx = x + ux * len * 0.5, my = y + uy * len * 0.5;
-  P.moveTo(x, y); P.quadraticCurveTo(mx + px * wid, my + py * wid, ex, ey); P.quadraticCurveTo(mx - px * wid, my - py * wid, x, y); P.closePath();
+// ----- Path helpers. A "frame" maps (u along the head's direction, v across it) to the drawing -----
+const frame = (x, y, ang) => { const ux = Math.cos(ang), uy = Math.sin(ang); return (u, v) => [x + ux * u - uy * v, y + uy * u + ux * v]; };
+const circ = (P, [x, y], r) => { P.moveTo(x + r, y); P.arc(x, y, r, 0, TAU); };
+const ell = (P, [x, y], rx, ry, rot) => { P.moveTo(x + rx * Math.cos(rot), y + rx * Math.sin(rot)); P.ellipse(x, y, rx, ry, rot, 0, TAU); };
+// A dome: half an ellipse bulging along ang, flat side at (x, y)
+function dome(P, [x, y], rx, ry, ang) {
+  const px = -Math.sin(ang), py = Math.cos(ang);
+  P.moveTo(x - px * rx, y - py * rx); P.ellipse(x, y, rx, ry, ang + Math.PI / 2, Math.PI, TAU); P.closePath();
 }
-// A grass blade: wide at the base, bending to a point
-function blade(P, x, y, ang, len, wid, bend) {
-  const ux = Math.cos(ang), uy = Math.sin(ang), px = -uy, py = ux;
-  const tx = x + ux * len + px * bend * len, ty = y + uy * len + py * bend * len, cx = x + ux * len * 0.55 + px * bend * len * 0.3, cy = y + uy * len * 0.55 + py * bend * len * 0.3;
-  P.moveTo(x - px * wid, y - py * wid); P.quadraticCurveTo(cx - px * wid * 0.5, cy - py * wid * 0.5, tx, ty);
-  P.quadraticCurveTo(cx + px * wid * 0.5, cy + py * wid * 0.5, x + px * wid, y + py * wid); P.closePath();
+function leaf(P, [x, y], ang, len, wid) {
+  const f = frame(x, y, ang), e = f(len, 0), a = f(len * 0.5, wid), b = f(len * 0.5, -wid);
+  P.moveTo(x, y); P.quadraticCurveTo(a[0], a[1], e[0], e[1]); P.quadraticCurveTo(b[0], b[1], x, y); P.closePath();
 }
-// A thin stalk from a to b (a capsule)
-function stalk(P, ax, ay, bx, by, r) {
-  const dx = bx - ax, dy = by - ay, d = Math.hypot(dx, dy) || 1e-6, px = -dy / d * r, py = dx / d * r;
-  P.moveTo(ax + px, ay + py); P.lineTo(bx + px, by + py); P.arc(bx, by, r, Math.atan2(py, px), Math.atan2(py, px) + Math.PI);
-  P.lineTo(ax - px, ay - py); P.arc(ax, ay, r, Math.atan2(-py, -px), Math.atan2(-py, -px) + Math.PI); P.closePath();
+// A curved, tapering stalk from a to b; returns the direction it arrives in
+function stalk(P, a, b, bend, w0, w1) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy) || 1e-6, px = -dy / d, py = dx / d;
+  const c = [a[0] + dx * 0.5 + px * bend * d, a[1] + dy * 0.5 + py * bend * d];
+  P.moveTo(a[0] + px * w0, a[1] + py * w0); P.quadraticCurveTo(c[0] + px * w1, c[1] + py * w1, b[0] + px * w1, b[1] + py * w1);
+  P.lineTo(b[0] - px * w1, b[1] - py * w1); P.quadraticCurveTo(c[0] - px * w1, c[1] - py * w1, a[0] - px * w0, a[1] - py * w0); P.closePath();
+  return Math.atan2(b[1] - c[1], b[0] - c[0]);
 }
-function petals(P, x, y, R, count, pr, rot) {
-  for (let k = 0; k < count; k++) { const a = rot + k * TAU / count; ell(P, x + Math.cos(a) * R, y + Math.sin(a) * R, pr * 1.5, pr * 0.7, a); }
-}
+const halo = (g, c, R) => { circ(g.P.halo, c, R * 1.9); circ(g.P.halo2, c, R * 1.3); };
 
-// ----- Blooms and clumps (used along the line, and on their own for Beads) -----
-// g: { P: keyed paths, rnd }, (x, y): centre, R: size, ang: the "up" direction
+// ----- Heads. g: { P: keyed paths, rnd }, (x, y): where the stalk ends, R: size, ang: the way the stalk points -----
 const HEADS = {
-  daisy(g, x, y, R) { petals(g.P.petal, x, y, R * 0.62, 11, R * 0.3, g.rnd() * TAU); circ(g.P.ctr, x, y, R * 0.34); circ(g.P.dot, x - R * 0.08, y - R * 0.08, R * 0.12); },
-  tulip(g, x, y, R, ang) {
-    const k = g.rnd() < 0.34 ? 'cupA' : g.rnd() < 0.5 ? 'cupB' : 'cupC', ux = Math.cos(ang), uy = Math.sin(ang), px = -uy, py = ux;
-    ell(g.P[k], x - px * R * 0.32, y - py * R * 0.32, R * 0.62, R * 0.36, ang + 0.25);
-    ell(g.P[k], x + px * R * 0.32, y + py * R * 0.32, R * 0.62, R * 0.36, ang - 0.25);
-    ell(g.P[k + 'Hi'], x + ux * R * 0.1, y + uy * R * 0.1, R * 0.6, R * 0.3, ang);
+  // Mushroom: a dome cap in one of two colours, pale gills, spots
+  glowcap(g, x, y, R, ang) {
+    const f = frame(x, y, ang), v = g.rnd() < 0.55 ? 'A' : 'B';
+    halo(g, f(R * 0.4, 0), R);
+    ell(g.P.gill, f(0, 0), R * 0.95, R * 0.16, ang + Math.PI / 2);
+    dome(g.P['cap' + v], f(0, 0), R, R * 0.85, ang);
+    dome(g.P['cap' + v + 'Hi'], f(R * 0.12, R * 0.18), R * 0.62, R * 0.5, ang);
+    for (let k = 0, n = 3 + Math.floor(g.rnd() * 3); k < n; k++) circ(g.P.spot, f(R * (0.18 + 0.45 * g.rnd()), R * (g.rnd() * 1.2 - 0.6)), R * (0.07 + 0.08 * g.rnd()));
   },
-  lavender(g, x, y, R, ang) {
-    const ux = Math.cos(ang), uy = Math.sin(ang);
-    stalk(g.P.stalk, x, y, x + ux * R * 2.2, y + uy * R * 2.2, R * 0.08);
-    for (let k = 0; k < 7; k++) { const t = 0.7 + k * 0.24, s = R * (0.34 - k * 0.025), side = k % 2 ? 1 : -1; ell(k % 3 ? g.P.bud : g.P.budHi, x + ux * R * t - uy * s * 0.5 * side, y + uy * R * t + ux * s * 0.5 * side, s, s * 0.6, ang); }
+  // Tall pointed cap with a frilled edge
+  bellcap(g, x, y, R, ang) {
+    const f = frame(x, y, ang), tip = f(R * 2.3, R * (g.rnd() - 0.5) * 0.5), P = g.P.cap, H = g.P.capHi;
+    halo(g, f(R * 0.9, 0), R);
+    let a = f(0, -R * 0.75), b = f(0, R * 0.75), c1 = f(R * 1.0, -R * 0.85), c2 = f(R * 1.0, R * 0.85);
+    P.moveTo(a[0], a[1]); P.quadraticCurveTo(c1[0], c1[1], tip[0], tip[1]); P.quadraticCurveTo(c2[0], c2[1], b[0], b[1]); P.closePath();
+    a = f(R * 0.1, R * 0.05); c1 = f(R * 1.0, R * 0.1); c2 = f(R * 0.9, R * 0.7); b = f(R * 0.1, R * 0.6);
+    H.moveTo(a[0], a[1]); H.quadraticCurveTo(c1[0], c1[1], tip[0], tip[1]); H.quadraticCurveTo(c2[0], c2[1], b[0], b[1]); H.closePath();
+    for (let k = 0; k < 5; k++) circ(g.P.frill, f(-R * 0.02, R * (-0.6 + k * 0.3)), R * 0.14);
   },
-  fern(g, x, y, R, ang) {
-    for (let k = 0; k < 5; k++) { const t = k / 5, a = ang + (k % 2 ? 0.9 : -0.9); leaf(k % 2 ? g.P.leaf : g.P.leafHi, x + Math.cos(ang) * R * t * 1.6, y + Math.sin(ang) * R * t * 1.6, a, R * (1 - t * 0.6), R * 0.22); }
-    leaf(g.P.leaf, x, y, ang, R * 2, R * 0.16);
+  // Trumpet: a funnel with a bright rim and stamens rising out of it
+  trumpet(g, x, y, R, ang) {
+    const f = frame(x, y, ang), P = g.P.horn, top = R * 1.25;
+    halo(g, f(top, 0), R);
+    const a = f(0, -R * 0.12), b = f(top, -R), c = f(top, R), d = f(0, R * 0.12), c1 = f(R * 0.85, -R * 0.12), c2 = f(R * 0.85, R * 0.12);
+    P.moveTo(a[0], a[1]); P.quadraticCurveTo(c1[0], c1[1], b[0], b[1]); P.lineTo(c[0], c[1]); P.quadraticCurveTo(c2[0], c2[1], d[0], d[1]); P.closePath();
+    ell(g.P.rim, f(top, 0), R, R * 0.3, ang + Math.PI / 2);
+    ell(g.P.inner, f(top, 0), R * 0.72, R * 0.17, ang + Math.PI / 2);
+    for (let k = 0; k < 4; k++) { const e = f(top + R * (0.5 + 0.5 * g.rnd()), R * (g.rnd() * 1.2 - 0.6)); stalk(g.P.stamen, f(top, R * (k - 1.5) * 0.2), e, 0.1, R * 0.03, R * 0.02); circ(g.P.dot, e, R * 0.07); }
   },
-  grass(g, x, y, R, ang) {
-    for (let k = 0; k < 6; k++) { const key = ['g1', 'g2', 'g3'][k % 3]; blade(g.P[key], x + (g.rnd() - 0.5) * R * 0.8 * Math.sin(ang), y - (g.rnd() - 0.5) * R * 0.8 * Math.cos(ang), ang + (g.rnd() - 0.5) * 0.6, R * (1.3 + g.rnd() * 1.2), R * 0.1, (g.rnd() - 0.5) * 0.4); }
+  // Curling tendril ending in a bud
+  spiral(g, x, y, R, ang) {
+    const dir = g.rnd() < 0.5 ? 1 : -1, c = frame(x, y, ang)(R * 0.9, 0);
+    halo(g, c, R * 0.8);
+    let q = c;
+    for (let k = 0; k <= 16; k++) { const t = k / 16, a = ang + Math.PI + dir * t * 2.4 * Math.PI, rad = R * 0.9 * (1 - t * 0.85); q = [c[0] + Math.cos(a) * rad, c[1] + Math.sin(a) * rad]; circ(g.P.curl, q, R * (0.17 - 0.09 * t)); }
+    circ(g.P.dot, q, R * 0.16);
+    leaf(g.P.leaf, [x, y], ang + dir * 1.9, R * 0.9, R * 0.3);
   },
-  berries(g, x, y, R) {
-    const n = 3 + Math.floor(g.rnd() * 3);
-    for (let k = 0; k < n; k++) { const a = g.rnd() * TAU, d = R * 0.45 * Math.sqrt(g.rnd()), r = R * (0.28 + 0.08 * g.rnd()), bx = x + Math.cos(a) * d, by = y + Math.sin(a) * d; circ(g.P.berry, bx, by, r); circ(g.P.berryHi, bx - r * 0.35, by - r * 0.35, r * 0.28); }
+  // Branching coral with flat glowing pads at the tips
+  coral(g, x, y, R, ang) {
+    const grow = (p, a, len, depth) => {
+      const e = [p[0] + Math.cos(a) * len, p[1] + Math.sin(a) * len];
+      stalk(g.P.branch, p, e, (g.rnd() - 0.5) * 0.3, len * 0.09 * (depth + 1), len * 0.07 * (depth + 1));
+      if (depth > 0) { grow(e, a - 0.45 - 0.3 * g.rnd(), len * 0.72, depth - 1); grow(e, a + 0.45 + 0.3 * g.rnd(), len * 0.72, depth - 1); return; }
+      halo(g, e, len * 0.5);
+      ell(g.P.pad, e, len * 0.85, len * 0.26, a + Math.PI / 2); ell(g.P.padHi, [e[0] + Math.cos(a) * len * 0.08, e[1] + Math.sin(a) * len * 0.08], len * 0.6, len * 0.13, a + Math.PI / 2);
+    };
+    grow([x, y], ang, R, 2);
   },
-  blossom(g, x, y, R) { petals(g.P.petal, x, y, R * 0.45, 5, R * 0.36, g.rnd() * TAU); circ(g.P.ctr, x, y, R * 0.18); for (let k = 0; k < 5; k++) { const a = g.rnd() * TAU; circ(g.P.dot, x + Math.cos(a) * R * 0.3, y + Math.sin(a) * R * 0.3, R * 0.05); } },
-  clover(g, x, y, R) {
-    const rot = g.rnd() * TAU;
-    for (let k = 0; k < 3; k++) { const a = rot + k * TAU / 3; circ(g.P.leaf, x + Math.cos(a) * R * 0.32, y + Math.sin(a) * R * 0.32, R * 0.34); circ(g.P.leafHi, x + Math.cos(a) * R * 0.36, y + Math.sin(a) * R * 0.36, R * 0.14); }
-    if (g.rnd() < 0.3) for (let k = 0; k < 6; k++) { const a = g.rnd() * TAU, d = R * 0.25 * g.rnd(); circ(g.P.flower, x + R * 0.6 + Math.cos(a) * d, y - R * 0.5 + Math.sin(a) * d, R * 0.14); }
+  // A cluster of glowing fruit
+  moonberry(g, x, y, R, ang) {
+    const f = frame(x, y, ang);
+    leaf(g.P.leaf, [x, y], ang + 1.1, R * 1.1, R * 0.35); leaf(g.P.leaf, [x, y], ang - 1.2, R * 0.9, R * 0.3);
+    for (let k = 0, n = 2 + Math.floor(g.rnd() * 3); k < n; k++) {
+      const c = f(R * (0.4 + 0.5 * g.rnd()), R * (g.rnd() - 0.5) * 1.1), r = R * (0.3 + 0.14 * g.rnd());
+      halo(g, c, r * 1.2); circ(g.P.berry, c, r); circ(g.P.berryHi, [c[0] - r * 0.25, c[1] - r * 0.28], r * 0.55); circ(g.P.shine, [c[0] - r * 0.38, c[1] - r * 0.4], r * 0.16);
+    }
   },
-  sunflower(g, x, y, R) { petals(g.P.petal, x, y, R * 0.78, 16, R * 0.3, g.rnd() * TAU); petals(g.P.petalHi, x, y, R * 0.7, 16, R * 0.18, g.rnd() * TAU); circ(g.P.ctr, x, y, R * 0.5); circ(g.P.dot, x, y, R * 0.3); },
-};
-
-// ----- Along a line -----
-// L: arc length per point; nx, ny: normals; w: half-width per point; w0: base half-width; up: which side is "up" (+1 / -1)
-function walk(L, n, start, stepFn, fn) {
-  let d = start, j = 0;
-  while (d < L[n - 1]) { while (j < n - 1 && L[j] < d) j++; fn(j); d += stepFn(); }
-}
-const ALONG = {
-  daisy(g, a) {
-    walk(a.L, a.n, a.w0 * g.rnd(), () => a.w0 * (2 + g.rnd() * 1.4), j => {
-      const side = g.rnd() < 0.5 ? 1 : -1, len = a.w0 * (0.8 + g.rnd() * 0.8), ang = Math.atan2(a.ny[j], a.nx[j]) + (side < 0 ? Math.PI : 0);
-      const hx = a.xs[j] + Math.cos(ang) * len, hy = a.ys[j] + Math.sin(ang) * len;
-      stalk(g.P.stalk, a.xs[j], a.ys[j], hx, hy, a.w0 * 0.07);
-      leaf(g.P.leaf, a.xs[j], a.ys[j], ang + side * 0.9, a.w0 * 0.9, a.w0 * 0.22);
-      HEADS.daisy(g, hx, hy, a.w0 * (0.8 + g.rnd() * 0.5));
-    });
+  // Lantern fruit: a teardrop with a bright heart
+  lantern(g, x, y, R, ang) {
+    const f = frame(x, y, ang), c = f(R * 1.0, 0), a = f(R * 0.55, -R * 0.52), b = f(R * 0.55, R * 0.52);
+    halo(g, c, R * 1.1);
+    g.P.lamp.moveTo(x, y); g.P.lamp.lineTo(a[0], a[1]); g.P.lamp.lineTo(b[0], b[1]); g.P.lamp.closePath(); circ(g.P.lamp, c, R * 0.7);
+    ell(g.P.band, c, R * 0.7, R * 0.12, ang + Math.PI / 2);
+    circ(g.P.lampHi, f(R * 1.05, 0), R * 0.38); circ(g.P.shine, f(R * 0.95, -R * 0.2), R * 0.12);
   },
-  tulip(g, a) {
-    walk(a.L, a.n, a.w0 * g.rnd(), () => a.w0 * (2.4 + g.rnd() * 1.6), j => {
-      const ang = Math.atan2(a.ny[j] * a.up, a.nx[j] * a.up) + (g.rnd() - 0.5) * 0.4, len = a.w0 * (1.6 + g.rnd() * 1.2);
-      const hx = a.xs[j] + Math.cos(ang) * len, hy = a.ys[j] + Math.sin(ang) * len;
-      stalk(g.P.stalk, a.xs[j], a.ys[j], hx, hy, a.w0 * 0.09);
-      leaf(g.P.leaf, a.xs[j], a.ys[j], ang + 0.5, len * 0.8, a.w0 * 0.28); leaf(g.P.leafHi, a.xs[j], a.ys[j], ang - 0.45, len * 0.7, a.w0 * 0.24);
-      HEADS.tulip(g, hx, hy, a.w0 * (0.9 + g.rnd() * 0.3), ang);
-    });
+  // Spotted puffball letting spores drift off
+  puffball(g, x, y, R, ang) {
+    const f = frame(x, y, ang), c = f(R * 0.7, 0), r = R * 0.8;
+    halo(g, c, r);
+    circ(g.P.ball, c, r); circ(g.P.ballHi, [c[0] - r * 0.22, c[1] - r * 0.25], r * 0.6);
+    for (let k = 0, n = 4 + Math.floor(g.rnd() * 3); k < n; k++) { const a = g.rnd() * TAU, d = r * 0.7 * Math.sqrt(g.rnd()); circ(g.P.spot, [c[0] + Math.cos(a) * d, c[1] + Math.sin(a) * d], r * (0.1 + 0.1 * g.rnd())); }
+    for (let k = 0; k < 4; k++) circ(g.P.spore, f(R * (1.7 + 1.3 * g.rnd()), R * (g.rnd() - 0.5) * 1.6), R * (0.04 + 0.05 * g.rnd()));
   },
-  lavender(g, a) {
-    walk(a.L, a.n, a.w0 * g.rnd() * 0.5, () => a.w0 * (0.9 + g.rnd() * 0.7), j => {
-      const ang = Math.atan2(a.ny[j] * a.up, a.nx[j] * a.up) + (g.rnd() - 0.5) * 0.5;
-      HEADS.lavender(g, a.xs[j], a.ys[j], a.w0 * (0.6 + g.rnd() * 0.4), ang);
-    });
-  },
-  fern(g, a) {
-    let side = 1;
-    walk(a.L, a.n, a.w0 * 0.3, () => a.w0 * 0.42, j => {
-      const t = a.L[j] / a.L[a.n - 1], tang = Math.atan2(-a.nx[j], a.ny[j]), ang = Math.atan2(a.ny[j] * side, a.nx[j] * side) * 0.55 + tang * 0.45;
-      const fwd = Math.atan2(Math.sin(ang), Math.cos(ang));
-      leaf(side > 0 ? g.P.leaf : g.P.leafHi, a.xs[j], a.ys[j], fwd, a.w0 * (2 - 1.6 * t), a.w0 * (0.3 - 0.18 * t));
-      side = -side;
-    });
-  },
-  grass(g, a) {
-    walk(a.L, a.n, 0, () => a.w0 * (0.22 + g.rnd() * 0.25), j => {
-      const key = ['g1', 'g2', 'g3'][Math.floor(g.rnd() * 3)], ang = Math.atan2(a.ny[j] * a.up, a.nx[j] * a.up) + (g.rnd() - 0.5) * 0.7;
-      blade(g.P[key], a.xs[j], a.ys[j], ang, a.w0 * (1 + g.rnd() * 2.2), a.w0 * 0.16, (g.rnd() - 0.5) * 0.5);
-    });
-  },
-  berries(g, a) {
-    let side = 1;
-    walk(a.L, a.n, a.w0 * g.rnd(), () => a.w0 * (0.9 + g.rnd() * 0.6), j => {
-      const ang = Math.atan2(a.ny[j] * side, a.nx[j] * side);
-      leaf(g.rnd() < 0.5 ? g.P.leaf : g.P.leafHi, a.xs[j], a.ys[j], ang + 0.3 * side, a.w0 * (1.2 + g.rnd() * 0.6), a.w0 * 0.4);
-      if (g.rnd() < 0.45) HEADS.berries(g, a.xs[j] - Math.cos(ang) * a.w0 * 0.8, a.ys[j] - Math.sin(ang) * a.w0 * 0.8, a.w0 * (0.8 + g.rnd() * 0.4));
-      side = -side;
-    });
-  },
-  blossom(g, a) {
-    walk(a.L, a.n, a.w0 * g.rnd(), () => a.w0 * (1.1 + g.rnd() * 1.2), j => {
-      const side = g.rnd() < 0.5 ? 1 : -1, ang = Math.atan2(a.ny[j] * side, a.nx[j] * side) + (g.rnd() - 0.5) * 0.8, len = a.w0 * (0.6 + g.rnd() * 1.4);
-      const tx = a.xs[j] + Math.cos(ang) * len, ty = a.ys[j] + Math.sin(ang) * len;
-      if (len > a.w0) stalk(g.P.twig, a.xs[j], a.ys[j], tx, ty, a.w0 * 0.1);
-      if (g.rnd() < 0.75) HEADS.blossom(g, tx, ty, a.w0 * (0.8 + g.rnd() * 0.5)); else circ(g.P.bud, tx, ty, a.w0 * 0.22);
-    });
-  },
-  clover(g, a) {
-    walk(a.L, a.n, 0, () => a.w0 * (0.7 + g.rnd() * 0.6), j => {
-      const off = (g.rnd() - 0.5) * a.w0 * 1.4;
-      HEADS.clover(g, a.xs[j] + a.nx[j] * off, a.ys[j] + a.ny[j] * off, a.w0 * (0.6 + g.rnd() * 0.5));
-    });
-  },
-  sunflower(g, a) {
-    walk(a.L, a.n, a.w0 * 0.8, () => a.w0 * (1.4 + g.rnd() * 0.8), j => {
-      const side = g.rnd() < 0.5 ? 1 : -1;
-      leaf(side > 0 ? g.P.leaf : g.P.leafHi, a.xs[j], a.ys[j], Math.atan2(a.ny[j] * side, a.nx[j] * side) + 0.4 * side, a.w0 * (1.6 + g.rnd() * 0.6), a.w0 * 0.55);
-    });
-    const e = a.n - 1, ang = Math.atan2(a.ys[e] - a.ys[Math.max(e - 3, 0)], a.xs[e] - a.xs[Math.max(e - 3, 0)]);
-    HEADS.sunflower(g, a.xs[e] + Math.cos(ang) * a.w0 * 1.5, a.ys[e] + Math.sin(ang) * a.w0 * 1.5, a.w0 * 2.2);
+  // Star-shaped bloom with two rings of pointed petals
+  starbloom(g, x, y, R, ang) {
+    const c = frame(x, y, ang)(R * 0.6, 0), rot = g.rnd() * TAU, n = 6 + Math.floor(g.rnd() * 3);
+    halo(g, c, R);
+    for (let k = 0; k < n; k++) leaf(g.P.petal, c, rot + k * TAU / n, R * 1.15, R * 0.32);
+    for (let k = 0; k < n; k++) leaf(g.P.petalHi, c, rot + (k + 0.5) * TAU / n, R * 0.7, R * 0.2);
+    circ(g.P.ctr, c, R * 0.26);
+    for (let k = 0; k < 5; k++) { const a = g.rnd() * TAU; circ(g.P.dot, [c[0] + Math.cos(a) * R * 0.14, c[1] + Math.sin(a) * R * 0.14], R * 0.05); }
   },
 };
+// How each plant sprouts along a line, in multiples of the line's half-width: gap between sprouts, stalk length,
+// head size, stalk width, and which side (up = toward the top of the drawing, alt = alternating, any = either)
+const SPROUT = {
+  glowcap: { gap: [1.6, 2.8], len: [1.2, 2.8], R: [0.8, 1.3], w: 0.16, side: 'up' },
+  bellcap: { gap: [1.3, 2.3], len: [1.4, 3.2], R: [0.55, 0.95], w: 0.14, side: 'up' },
+  trumpet: { gap: [1.9, 2.9], len: [0.7, 1.8], R: [0.9, 1.3], w: 0.14, side: 'up' },
+  spiral: { gap: [0.9, 1.5], len: [0.5, 1.5], R: [0.7, 1.2], w: 0.1, side: 'alt' },
+  coral: { gap: [3.0, 4.2], len: [0.3, 0.6], R: [1.1, 1.6], w: 0.2, side: 'up' },
+  moonberry: { gap: [1.0, 1.7], len: [0.5, 1.3], R: [0.7, 1.0], w: 0.08, side: 'alt' },
+  lantern: { gap: [1.3, 2.2], len: [0.8, 1.7], R: [0.7, 1.0], w: 0.07, side: 'alt' },
+  puffball: { gap: [1.4, 2.3], len: [1.0, 2.4], R: [0.7, 1.1], w: 0.13, side: 'up' },
+  starbloom: { gap: [2.2, 3.2], len: [0.9, 2.0], R: [1.0, 1.5], w: 0.1, side: 'any' },
+};
 
-// Grow a plant. keys: the piece names this plant uses. Returns { key: Path2D, ..., all: every piece together }.
-// line: { xs, ys, nx, ny, w, L, n, w0 } along a drawn line, or beads: [{ x, y, r }] for one bloom per bead.
+// Grow a plant. keys: the piece names this plant's material colours. Returns { key: Path2D, ..., all: every piece }.
+// line: { xs, ys, nx, ny, w, L, n, w0 } along a drawn line, or beads: [{ x, y, r }] for one head per bead.
 export function growPlant(kind, keys, id, line, beads) {
-  const P = {};
-  for (const k of keys) P[k] = new Path2D();
-  const g = { P, rnd: mulberry32(hash32(id, 777)) };
+  const made = {}, P = new Proxy(made, { get: (t, k) => t[k] || (t[k] = new Path2D()) });
+  const g = { P, rnd: mulberry32(hash32(id, 777)) }, rnd = g.rnd, between = ([a, b]) => a + (b - a) * rnd();
   if (beads) {
-    for (const b of beads) HEADS[kind](g, b.x, b.y, b.r * 2.2, -Math.PI / 2);
+    for (const b of beads) HEADS[kind](g, b.x, b.y, b.r * 2.2, -Math.PI / 2 + (rnd() - 0.5) * 0.5);
   } else {
-    // "Up" is the side of the line facing the top of the drawing, so grass and tulips grow upward in free mode
+    const { xs, ys, nx, ny, L, n, w0 } = line, S = SPROUT[kind];
+    // "Up" is the side of the line facing the top of the drawing, so caps and stalks rise in free mode
     let sy = 0;
-    for (let i = 0; i < line.n; i++) sy += line.ny[i];
-    ALONG[kind](g, { ...line, up: sy > 0 ? -1 : 1 });
+    for (let i = 0; i < n; i++) sy += ny[i];
+    const up = sy > 0 ? -1 : 1;
+    let d = w0 * rnd(), j = 0, alt = 1;
+    while (d < L[n - 1]) {
+      while (j < n - 1 && L[j] < d) j++;
+      const side = S.side === 'up' ? up : S.side === 'alt' ? (alt = -alt) : rnd() < 0.5 ? 1 : -1;
+      const ang = Math.atan2(ny[j] * side, nx[j] * side) + (rnd() - 0.5) * 0.7, len = w0 * between(S.len);
+      const base = [xs[j], ys[j]], tip = [xs[j] + Math.cos(ang) * len, ys[j] + Math.sin(ang) * len];
+      const arrive = stalk(P.stalk, base, tip, (rnd() - 0.5) * 0.5, w0 * S.w, w0 * S.w * 0.7);
+      HEADS[kind](g, tip[0], tip[1], w0 * between(S.R) * 1.35, arrive);
+      d += w0 * between(S.gap);
+    }
   }
-  const all = new Path2D();
-  for (const k of keys) all.addPath(P[k]);
-  return { ...P, all };
+  const out = {}, all = new Path2D();
+  for (const k of keys) { out[k] = made[k] || new Path2D(); if (k !== 'halo' && k !== 'halo2') all.addPath(out[k]); }
+  return { ...out, all };
 }

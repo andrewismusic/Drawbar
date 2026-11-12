@@ -5,6 +5,7 @@ import { MATS } from '../styles/index.js';
 import { TOOL } from './tools.js';
 import { glyphCells, glyphShape, lineSamples } from '../render/glyphs.js';
 import { growPlant } from '../render/plants.js';
+import { spaceShape } from '../render/space.js';
 import { stampShape } from '../render/stamps.js';
 
 export function resample(pts, sp) {
@@ -96,6 +97,8 @@ export function prepare(s) {
     if (s.tool === 'glow' && M.glyph) {
       // Code: the cells the line passes through
       s._shape = glyphShape(glyphCells(lineSamples(xs, ys, w, n - 1, L), s.id), w0);
+    } else if (s.tool === 'glow' && M.space) {
+      s._shape = spaceShape(M, s.id, { xs, ys, w, L, n, w0 });
     } else if (s.tool === 'glow' && M.plant) {
       // Garden: a thin stem with the plant grown along it
       s._shape = buildShape(capsAlong(xs, ys, w.map(v => v * M.stemW), 0, n - 1, 2), [], M.ks, w0 * 0.9);
@@ -146,19 +149,20 @@ export function prepare(s) {
       const a = p[j - 1], b = p[j], seg = (L[j] - L[j - 1]) || 1e-6, u = clamp((d - L[j - 1]) / seg, 0, 1);
       beads.push({ x: a[0] + (b[0] - a[0]) * u, y: a[1] + (b[1] - a[1]) * u, r });
     }
-    if (M.glyph || M.plant) { shapeFromBeads(s, M, beads); return; }
+    if (M.glyph || M.plant || M.space) { shapeFromBeads(s, M, beads); return; }
     let caps = [], circ = M.geo ? beads.map((b, i) => [b.x, b.y, b.r * M.geo.bead, M.geo.sides, M.geo.spin + i * M.geo.turn]) : beads.map(b => [b.x, b.y, b.r]);
     if (M.drip) { const d = dripsFor(beads.map(b => [b.x, b.y, b.r]), mulberry32(hash32(s.id, 91))); caps = d.caps; circ = circ.concat(d.circ); }
     const bw0 = beads.reduce((a, b) => a + b.r, 0) / beads.length, inkT = M.comic ? 0.26 * (M.inkW || 1) * bw0 : (M.ink || 0) * bw0;
     s._shape = buildShape(caps, circ, M.ks, bw0, inkT);
   }
-  if (s._dot && (M.glyph || M.plant)) { shapeFromBeads(s, M, [{ x: p[0][0], y: p[0][1], r: (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz }]); return; }
+  if (s._dot && (M.glyph || M.plant || M.space)) { shapeFromBeads(s, M, [{ x: p[0][0], y: p[0][1], r: (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz }]); return; }
   if (s._dot) { const rr = (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz; s._shape = buildShape([], [M.geo ? [p[0][0], p[0][1], rr * M.geo.bead, M.geo.sides, M.geo.spin] : [p[0][0], p[0][1], rr]], M.ks, rr, M.comic ? 0.26 * rr : (M.ink || 0) * rr); }
 }
 // Code cells or garden blooms at points (Beads, and single dots)
 function shapeFromBeads(s, M, beads) {
   const bw0 = beads.reduce((a, b) => a + b.r, 0) / beads.length;
   if (M.glyph) { s._shape = glyphShape(glyphCells(beads.map(b => [b.x, b.y, b.r]), s.id), bw0); return; }
+  if (M.space) { s._shape = spaceShape(M, s.id, null, beads); return; }
   // Dense blooms are thinned (every 2nd or 3rd bead) so a line of them stays quick to draw in every copy
   const every = M.beadEvery || 1, pieces = growPlant(M.plant, M.keys, s.id, null, every > 1 && beads.length > 2 ? beads.filter((b, i) => i % every === 0) : beads);
   s._shape = { paths: { ...pieces, 1: pieces.all }, w0: bw0, wd: bw0, ink: null };

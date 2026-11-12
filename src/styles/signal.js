@@ -1,6 +1,8 @@
-// Signal: plain, bright, saturated marks with a white-hot core, for the Glitch effects to tear apart. Flat and unlit.
+// Wire: the Glitch tab's wireframe brushes. Each draws a chain of tumbling 3D solids along the line, in thin bright
+// lines (render/glitchfx.js). live: redrawn every frame, never cached. (These five slots were v22's plain neon marks.)
 import { F } from '../render/ops.js';
 
+const ring = c => `radial-gradient(circle, transparent 0 30%, ${c} 34% 46%, transparent 50%), conic-gradient(from 45deg, ${c} 0 2%, transparent 0 25%, ${c} 0 27%, transparent 0 50%, ${c} 0 52%, transparent 0 75%, ${c} 0 77%, transparent 0), #0b0e18`;
 export const signals = [
-  ['Hot pink', '#ff2e97'], ['Electric blue', '#2d6bff'], ['Laser lime', '#b6ff1a'], ['Solar orange', '#ff7a1a'], ['White noise', '#eef2ff'],
-].map(([name, c]) => ({ name, accent: c, glow: c, glowA: 0.2, make: () => [F(1, c), F(0.3, '#ffffff', 0, 0.85)], swatch: `radial-gradient(circle, #fff 0 18%, ${c} 34%)` }));
+  ['Tetra', '#ff2e97', 'tetra'], ['Cube', '#4d8bff', 'cube'], ['Octa', '#b6ff1a', 'octa'], ['Icosa', '#ff8a2a', 'icosa'], ['Dodeca', '#eef2ff', 'dodeca'],
+].map(([name, c, wire]) => ({ name, accent: c, glow: c, glowA: 0, wire, live: true, make: () => [F(1, c)], swatch: ring(c) }));

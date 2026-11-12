@@ -10,10 +10,11 @@ import { flats } from './flat.js';
 import { glyphMats } from './code.js';
 import { plants } from './garden.js';
 import { signals } from './signal.js';
+import { spaceMats } from './space.js';
 
 // New materials are only ever appended: a stroke stores its material as an index into this list (clips depend on it)
 export const MATS = [liquidMetal, ...creams, ...comics, comicCloud, inkHatch, ...drips, softCloud, slimeMat, flowerVine,
-  ...pixels, ...shapes, ...neons, ...sprays, ...flats, ...glyphMats, ...plants, ...signals];
+  ...pixels, ...shapes, ...neons, ...sprays, ...flats, ...glyphMats, ...plants, ...signals, ...spaceMats];
 export const matIndex = name => { const i = MATS.findIndex(m => m.name === name); if (i < 0) throw new Error('No material ' + name); return i; };
 for (const M of MATS) { M.ops = M.make();
   // Moving strokes are redrawn every frame, so they use crisp layers instead of the costly blurred ones
