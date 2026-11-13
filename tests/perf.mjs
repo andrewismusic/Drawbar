@@ -10,6 +10,8 @@ const url = process.argv[2] || 'http://localhost:3000/';
 
 const CASES = [
   // world, label, settings (the heaviest each world allows), avoided?, tools (default: all the world's tools)
+  ['paint', 'kaleido 8, mirror', { mode: 'kaleido', copies: 6, mirror: true }],
+  ['paint', 'tiles 4, 4 turns, mirror', { mode: 'tiles', tiles: 4, turns: 3, mirror: true }],
   ['materials', 'free, turning, mirror', { mode: 'free', frot: true, fmirror: true }],
   ['materials', 'tiles 4, 2 turns, mirror', { mode: 'tiles', tiles: 4, turns: 1, mirror: true }],
   ['comic', 'kaleido 8, mirror', { mode: 'kaleido', copies: 6, mirror: true }],
@@ -30,18 +32,12 @@ const CASES = [
   ['space', 'free, turning, mirror', { mode: 'free', frot: true, fmirror: true }],
   ['space', 'kaleido 8, mirror', { mode: 'kaleido', copies: 6, mirror: true }],
   ['space', 'tiles 4, 4 turns, mirror', { mode: 'tiles', tiles: 4, turns: 3, mirror: true }],
-  ['micro', 'free, turning, mirror', { mode: 'free', frot: true, fmirror: true }],
-  ['micro', 'kaleido 8, mirror', { mode: 'kaleido', copies: 6, mirror: true }],
-  ['micro', 'tiles 4, 4 turns, mirror', { mode: 'tiles', tiles: 4, turns: 3, mirror: true }],
-  ['graffiti', 'free, mirror', { mode: 'free', fmirror: true }],
-  ['graffiti', 'tiles 3, 2 turns, mirror', { mode: 'tiles', tiles: 3, turns: 1, mirror: true }],
   // Pairings the worlds avoid
   ['materials', 'AVOIDED: kaleido 6, mirror', { mode: 'kaleido', copies: 4, mirror: true }, true],
   ['materials', 'AVOIDED: kaleido 21, mirror', { mode: 'kaleido', copies: 10, mirror: true }, true],
   ['materials', 'AVOIDED: tiles 4, 6 turns, mirror', { mode: 'tiles', tiles: 4, turns: 4, mirror: true }, true],
   ['comic', 'AVOIDED: tiles 4, 6 turns, mirror', { mode: 'tiles', tiles: 4, turns: 4, mirror: true }, true],
   ['comic', 'AVOIDED: loops, kaleido 16', { mode: 'kaleido', copies: 9, mirror: true }, true, ['glow', 'beads', 'loop', 'ripple']],
-  ['graffiti', 'AVOIDED: kaleido 16, mirror', { mode: 'kaleido', copies: 9, mirror: true }, true],
 ];
 
 const browser = await chromium.launch();
@@ -61,7 +57,7 @@ for (const [wid, label, set, avoided, toolsOverride] of CASES.filter(c => !only 
       const pts = [], cx = Math.cos(c * 1.3) * 0.45, cy = Math.sin(c * 1.7) * 0.45;
       for (let i = 0; i < 40; i++) { const u = i / 39; pts.push([cx + 0.35 * (u - 0.5), cy + 0.12 * Math.sin(u * 7 + c), u * (0.4 + 0.05 * c), 0.5]); }
       const tool = tools[c % tools.length], kind = TOOL[tool].stamp;
-      const s = { id: 1000 + c, tool, color: w.matIdx[c % w.matIdx.length], size: 3.1, fx: set.fx, pts: kind ? stamps.stampPts(kind, cx, cy, 0.06 + 0.01 * (c % 4), c) : pts, start: 0, startBeat: 0 };
+      const s = { id: 1000 + c, tool: TOOL[tool].as || tool, head: tool === 'trace' || undefined, color: w.matIdx[c % w.matIdx.length], size: 3.1, fx: set.fx, pts: kind ? stamps.stampPts(kind, cx, cy, 0.06 + 0.01 * (c % 4), c) : pts, start: 0, startBeat: 0 };
       stroke.prepare(s); strokes.push(s);
     }
     st.score.strokes = strokes;
@@ -79,5 +75,5 @@ for (const [wid, label, set, avoided, toolsOverride] of CASES.filter(c => !only 
   }, { set, toolsOverride });
   console.log(`${wid.padEnd(11)} ${label.padEnd(34)} ${String(r.n).padStart(4)} ${r.redraw.toFixed(0).padStart(10)} ${r.p50.toFixed(0).padStart(10)} / ${String(r.p90.toFixed(0)).padEnd(6)} ${String(r.relit).padStart(5)}% of frames`);
 }
-console.log(errors.length ? 'ERRORS ' + errors.join('; ') : 'no page errors');
+console.log(errors.length ? 'ERRORS ' + errors.length + ': ' + [...new Set(errors)].join('; ') : 'no page errors');
 await browser.close();

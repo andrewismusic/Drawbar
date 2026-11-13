@@ -41,11 +41,15 @@ export function patternAmount() {
   return m === 'kaleido' ? Math.min(COPIES[score.copies] / 12, 1) : m === 'tiles' ? Math.min(score.tiles / 6 * (0.5 + 0.1 * TURNS[score.turns]), 1) : clamp(0.3 + 0.2 * (score.frot ? 1 : 0) + 0.25 * Math.log2(fs()), 0, 1);
 }
 // Run fn once per copy, with the context transformed into that copy's space (s: the stroke, for tile culling)
-export function forCopies(c, fn, s) {
+// from, to: only draw copies number from..to-1 (to spread one stroke's copies over several frames). Returns how many copies there are.
+export function forCopies(c, fn, s, from = 0, to = Infinity) {
   const m = score.mode;
-  if (m === 'free') return free.copies(c, fn, s);
-  if (m === 'kaleido') return kaleido.copies(c, fn, s);
-  tiles.copies(c, fn, s);
+  let i = 0;
+  const g = () => { if (i >= from && i < to) fn(); i++; };
+  if (m === 'free') free.copies(c, g, s);
+  else if (m === 'kaleido') kaleido.copies(c, g, s);
+  else tiles.copies(c, g, s);
+  return i;
 }
 // On repeating grids one eraser touch hits every tile, so it shrinks with the tile
 export function effEraseR() {

@@ -93,27 +93,33 @@ export function extraPieces(s, kind, xs, ys, nx, ny, w, L, n, w0) {
     }
   }
   if (kind === 'bristle') {
-    // Brush ink (v26): the whole mark is brush hairs, no solid body. About 24 hairs lie side by side across the width,
-    // wide enough to close up where the brush is loaded. Each hair carries its own load of ink, so they give out at
-    // different places (some early, some never); fast parts of the stroke run drier; a few hairs are split from the
-    // start and leave hair-thin gaps even in the wet part; and the hairs start and stop raggedly.
-    const B = out.br = new Path2D(), nb = 24, len = L[n - 1] || 1e-6, step = Math.max(1, Math.floor(n / 80)), sp = s._sp;
+    // Brush ink: the whole mark is brush hairs, no solid body. About 24 hairs lie side by side across the width, wide
+    // enough to close up where the brush is wet. How much ink a hair lays down at a point ("m" below) falls as its
+    // own load is used up, falls where the hand moved fast, and wanders with a noise that never repeats; the hair's
+    // width follows it, so hairs thin to a point as they run out instead of stopping in blocks (v27: at small sizes
+    // the old on/off dashes all came out the same length). Slow strokes come out full, fast ones dry and streaky.
+    const B = out.br = new Path2D(), nb = 24, len = L[n - 1] || 1e-6, step = Math.max(1, Math.floor(n / 90)), sp = s._sp, seed = hash32(s.id, 5);
+    const vn = (x, k) => { const q = Math.floor(x), f = x - q, t = f * f * (3 - 2 * f), a = hash32(seed, k, q) % 1024 / 1024, b = hash32(seed, k, q + 1) % 1024 / 1024; return a + (b - a) * t; };
+    const grain = Math.max(w0 * 2.5, 0.022);   // how long the wet and dry runs are; never shorter than this on thin brushes
     for (let b = 0; b < nb; b++) {
       const lat = ((b + 0.5) / nb) * 2 - 1 + (rnd() - 0.5) * 0.05, edge = Math.abs(lat);
-      const load = 0.55 + 1.5 * rnd() * rnd() + (rnd() < 0.2 ? 1.2 : 0) - edge * 0.25;   // how far this hair's ink lasts (in stroke lengths)
-      const split = rnd() < 0.14, wide = (split ? 0.5 : 1.25 + 0.5 * rnd()) / nb, ph = rnd() * 60, f1 = 0.5 + rnd(), f2 = 0.21 + 0.3 * rnd();
+      const load = 0.7 + 2.2 * rnd() * rnd() + (rnd() < 0.2 ? 2 : 0), split = rnd() < 0.12 ? 0.3 : 0, wide = (1.25 + 0.5 * rnd()) / nb, run = grain * (0.6 + 1.2 * rnd());
       const u0 = rnd() * rnd() * 0.05, u1 = 1 - rnd() * rnd() * 0.08;
-      let a = 0;
+      const kAt = i => {
+        const u = L[i] / len;
+        if (u < u0 || u > u1) return 0;
+        const m = 1.05 - u / load - 0.8 * Math.min(sp[i] / 2.5, 1) - 0.85 * vn(L[i] / run, b) - split - edge * 0.12 + 0.45;
+        return m <= 0 ? 0 : Math.pow(Math.min(m / 0.3, 1), 0.6);
+      };
+      let a = 0, ka = kAt(0);
       for (let i = step; a < n - 1; i += step) {
-        const e = Math.min(i, n - 1), u = L[e] / len, d = L[e] / w0;
-        // Ink left: falls as the hair's load is used up, faster where the hand moved fast; skips come in runs
-        const dry = u / load + 0.35 * Math.min(sp[e] / 2.5, 1), skip = 0.5 + 0.5 * Math.sin(d * f1 + ph) * Math.sin(d * f2 + ph * 1.7);
-        if (u >= u0 && u <= u1 && dry < 0.55 + skip * 0.75 && !(split && skip > 0.72)) {
-          const ka = lat * w[a] * 0.96, kb = lat * w[e] * 0.96, ax = xs[a] + nx[a] * ka, ay = ys[a] + ny[a] * ka, bx = xs[e] + nx[e] * kb, by = ys[e] + ny[e] * kb;
-          const dx = bx - ax, dy = by - ay, dl = Math.hypot(dx, dy) || 1e-6, thin = dry > 0.8 ? 0.6 : 1, ha = w[a] * wide * thin, hb = w[e] * wide * thin, ux = dx / dl, uy = dy / dl, o = dl * 0.12;
+        const e = Math.min(i, n - 1), ke = kAt(e);
+        if (ka > 0 || ke > 0) {
+          const la = lat * w[a] * 0.96, lb = lat * w[e] * 0.96, ax = xs[a] + nx[a] * la, ay = ys[a] + ny[a] * la, bx = xs[e] + nx[e] * lb, by = ys[e] + ny[e] * lb;
+          const dx = bx - ax, dy = by - ay, dl = Math.hypot(dx, dy) || 1e-6, ha = w[a] * wide * ka, hb = w[e] * wide * ke, ux = dx / dl, uy = dy / dl, o = dl * 0.1;
           B.moveTo(ax - ux * o + uy * ha, ay - uy * o - ux * ha); B.lineTo(bx + ux * o + uy * hb, by + uy * o - ux * hb); B.lineTo(bx + ux * o - uy * hb, by + uy * o + ux * hb); B.lineTo(ax - ux * o - uy * ha, ay - uy * o + ux * ha); B.closePath();
         }
-        a = e;
+        a = e; ka = ke;
       }
     }
   }

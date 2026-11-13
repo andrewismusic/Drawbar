@@ -8,7 +8,7 @@ export default {
   id: 'glitch', name: 'Glitch',
   mats: ['Solids', 'Nodes', 'Matrix', 'Scope', 'Scanlines', 'Point cloud', 'Terrain', 'Pixel sort', 'Datamosh', 'Glitch blocks'],   // Matrix is the Code brush
   colors: ['#ff2e97', '#4d8bff', '#b6ff1a', '#ff8a2a', '#eef2ff', '#3dff7a', '#ffb000', '#35e6ff', '#ff4258'],
-  tools: ['glow', 'loop', 'ripple', 'erase'],
+  tools: ['glow', 'loop', 'trace', 'ripple', 'erase'],
   modes: ['free', 'tiles'],
   // Tiles: up to 3 across and no turns. Every stroke is redrawn every frame in every copy, so copies are kept few.
   limits: { copies: 0, tiles: 3, turns: 0, rotate: false },

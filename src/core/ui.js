@@ -2,6 +2,7 @@
 import { MODES, mirrored } from '../canvas/index.js';
 import { endPreview, keepClip, page, preview, showPage } from './clips.js';
 import { $ } from './dom.js';
+import { toRgb } from './color.js';
 import { openExport } from './export.js';
 import { P1, P2, mixKnobs, pk1, pk2, pk3, pm } from './knobs.js';
 import { isVisual, layout } from './layout.js';
@@ -56,8 +57,10 @@ export function syncUI() {
   $('styleName').textContent = w.name;
   for (const md of MODES) $('mode-' + md.id).hidden = !w.modes.includes(md.id);
   for (const t of TOOLS) $('tool-' + t.id).hidden = !w.tools.includes(t.id);
-  $('tools').classList.toggle('many', w.tools.length > 5);
-  MATS.forEach((M, i) => { const b = $('sw-' + i); b.hidden = !w.matIdx.includes(i); b.style.order = w.matIdx.indexOf(i); });
+  $('tools').classList.toggle('many', w.tools.length > 5); $('drawRow').classList.toggle('many', w.tools.length > 3);
+  $('swatches').parentElement.hidden = w.matIdx.length < 2;   // one brush: nothing to pick
+  // Effect brushes (they work on what is beneath them) are square, after a divider
+  { const first = w.matIdx.find(i => MATS[i].under); MATS.forEach((M, i) => { const b = $('sw-' + i); b.hidden = !w.matIdx.includes(i); b.style.order = w.matIdx.indexOf(i); b.classList.toggle('fxfirst', i === first); }); }
   $('pixBtn').hidden = !(w.options && w.options.pixel); $('pixBtn').setAttribute('aria-pressed', String(!!score.pixel));
   $('pk2w').hidden = free && !L.rotate;
   for (const md of MODES) $('mode-' + md.id).setAttribute('aria-pressed', String(m === md.id));
@@ -84,7 +87,8 @@ export function syncUI() {
   }
   // Brushes show in the tab's own order (w.mats), whatever their place in MATS
   MATS.forEach((M, i) => { const b = $('sw-' + i); b.setAttribute('aria-pressed', String(ui.color === i)); if (!b.hidden) { b.style.order = w.matIdx.indexOf(i); b.style.setProperty('--c', w.colors && M.swatchFor ? M.swatchFor(ui.tint) : M.swatch); b.title = M.label && w.colors ? M.label : M.name; b.setAttribute('aria-label', b.title); } });
-  document.documentElement.style.setProperty('--ink', ink());
+  // The accent follows the colour in hand, unless that is too dark to see on the dark panel
+  { const [r, g, b] = toRgb(ink()); document.documentElement.style.setProperty('--ink', r * 0.3 + g * 0.59 + b * 0.11 < 60 ? '#ece8dc' : ink()); }
   if (!anim) mapInput.value = String(score.map).padStart(3, '0');
   $('bpmVal').textContent = score.tempo;
   $('undoBtn').disabled = !undoStack.length;
@@ -126,7 +130,7 @@ export function initControls() {
   });
   PALETTE.forEach((c, i) => {
     const b = document.createElement('button');
-    b.className = 'sw'; b.id = 'sw-' + i; b.style.setProperty('--c', MATS[i].swatch); b.setAttribute('aria-label', MATS[i].name); b.title = MATS[i].name;
+    b.className = MATS[i].under ? 'sw fxsw' : 'sw'; b.id = 'sw-' + i; b.style.setProperty('--c', MATS[i].swatch); b.setAttribute('aria-label', MATS[i].name); b.title = MATS[i].name;
     b.addEventListener('click', () => { ui.color = i; if (ui.tool === 'erase') ui.tool = 'glow'; syncUI(); });
     $('swatches').appendChild(b);
   });
@@ -163,8 +167,13 @@ export function initControls() {
   // BPM box: drag up or down
   {
     const el = $('bpm');
-    let drag = null;
-    el.addEventListener('pointerdown', e => { drag = { y: e.clientY, x: e.clientX, v: score.tempo, started: false }; try { el.setPointerCapture(e.pointerId); } catch (err) {} el.classList.add('dragging'); e.preventDefault(); });
+    let drag = null, lastTap = 0;
+    el.addEventListener('pointerdown', e => {
+      // double tap: back to 92
+      const now = performance.now();
+      if (now - lastTap < 330) { lastTap = 0; drag = null; if (score.tempo !== 92) { checkpoint(); setTempo(92); rebuild(); syncUI(); } e.preventDefault(); return; }
+      lastTap = now;
+      drag = { y: e.clientY, x: e.clientX, v: score.tempo, started: false }; try { el.setPointerCapture(e.pointerId); } catch (err) {} el.classList.add('dragging'); e.preventDefault(); });
     el.addEventListener('pointermove', e => {
       if (!drag) return;
       const nv = drag.v + ((e.clientX - drag.x) - (e.clientY - drag.y)) / 3;

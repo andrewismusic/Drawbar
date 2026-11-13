@@ -6,7 +6,7 @@
 // Later genres: funk, hip-hop, lofi.
 export default {
   id: 'comic', name: 'Comic',
-  mats: ['Comic red', 'Pop', 'Screentone', 'Comic cloud', 'Ink hatch', 'Brush ink'],   // shown as Cel, Pop, Tone, Cloud, Hatch, Ink; the colour picker tints them
+  mats: ['Comic red', 'Pop', 'Screentone', 'Comic cloud', 'Ink hatch'],   // shown as Cel, Pop, Tone, Cloud, Hatch; the colour picker tints them (Ink became the Paint style in v27)
   colors: ['#ee3b3f', '#ff8a1f', '#ffcb2b', '#3ccf6e', '#3ea4ea', '#9b6bff', '#ff6fb5', '#f4efe2', '#15151c'],
   tools: ['glow', 'erase'],
   modes: ['free', 'kaleido', 'tiles'],

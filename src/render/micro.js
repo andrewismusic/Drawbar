@@ -157,6 +157,19 @@ export function growMicro(kind, keys, id, line, beads) {
   for (const k of keys) { out[k] = made[k] || new Path2D(); all.addPath(out[k]); }
   return { ...out, all };
 }
+// Paper (the Paint style): warm off-white with a faint tooth. Drawn once.
+let paper = null;
+export function drawPaperBg(ctx, W, H) {
+  if (!paper) {
+    paper = document.createElement('canvas'); paper.width = paper.height = 512;
+    const g = paper.getContext('2d'), r = mulberry32(77);
+    g.fillStyle = '#efe9dc'; g.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 5200; i++) { g.fillStyle = r() < 0.5 ? `rgba(120,104,80,${0.03 + 0.05 * r()})` : `rgba(255,255,255,${0.1 + 0.2 * r()})`; g.fillRect(r() * 512, r() * 512, 1 + r() * 1.5, 1 + r() * 1.5); }
+    for (let i = 0; i < 70; i++) { g.strokeStyle = `rgba(140,122,96,${0.03 + 0.04 * r()})`; g.lineWidth = 0.6; const x = r() * 512, y = r() * 512, a = r() * TAU, l = 4 + 14 * r(); g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+  }
+  const k = Math.max(W, H);
+  ctx.drawImage(paper, (W - k) / 2, (H - k) / 2, k, k);
+}
 // Bright-field backdrop: a pale lit field, darker toward the edge of the view, with out-of-focus specks. Drawn once.
 let bg = null;
 export function drawMicroBg(ctx, W, H) {

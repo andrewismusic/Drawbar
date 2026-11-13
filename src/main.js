@@ -11,7 +11,7 @@ import { layout } from './core/layout.js';
 import { playing, lastEnd, setLastEnd, sessionNow } from './core/transport.js';
 import { rearrange } from './sound/arranger.js';
 import { applySettings, switchWorld } from './core/settings.js';
-import { prefs, snap } from './core/state.js';
+import { prefs, savePrefs, snap } from './core/state.js';
 import { TABS } from './worlds/index.js';
 import { schedule } from './sound/scheduler.js';
 import { frame } from './render/compose.js';
@@ -30,7 +30,9 @@ rearrange();
   for (const id of ['main', 'panel']) ro.observe($(id));
 }
 // Reopen the style tab used last time
-switchWorld(TABS.some(w => w.id === prefs.world) ? prefs.world : 'comic');
+// (once, the first time v27 runs, everyone starts in Paint, the new default)
+if (!prefs.paint27) { prefs.paint27 = true; prefs.world = 'paint'; savePrefs(); }
+switchWorld(TABS.some(w => w.id === prefs.world) ? prefs.world : 'paint');
 // A different map every visit (the dice's kind of randomness: it only picks which map)
 applySettings({ ...snap().set, map: Math.floor(Math.random() * 1000) });
 applyView();

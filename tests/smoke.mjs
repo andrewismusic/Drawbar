@@ -28,7 +28,8 @@ for (const [name, width, height] of sizes) {
       const swatches = await page.locator('#swatches .sw:visible:not(.pixtoggle)').all();
       const tools = (await page.locator('#tools .tool:visible').evaluateAll(bs => bs.map(b => b.id.slice(5)))).filter(t => t !== 'erase');
       for (const [i, tool] of tools.entries()) {
-        await swatches[(i * 2 + mode.length) % swatches.length].click(); await page.click('#tool-' + tool);
+        if (swatches.length) await swatches[(i * 2 + mode.length) % swatches.length].click();   // (Paint has one brush: no swatches)
+        await page.click('#tool-' + tool);
         await draw([[0.3 + i * 0.05, 0.3], [0.5, 0.45], [0.62, 0.36 + i * 0.04]]);
       }
     }

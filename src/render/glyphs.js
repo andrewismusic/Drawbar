@@ -44,10 +44,10 @@ export function glyphShape(cells, w0) {
   return { paths: { 1: p }, w0, wd: w0, ink: null, cells };
 }
 // Samples along a line [x, y, r] every half cell
-export function lineSamples(xs, ys, w, i1, L) {
+export function lineSamples(xs, ys, w, i1, L, i0 = 0) {
   const out = [];
   let next = 0;
-  for (let i = 0; i <= i1; i++) {
+  for (let i = i0; i <= i1; i++) {
     if (L[i] + 1e-9 < next && i < i1) continue;
     out.push([xs[i], ys[i], w[i] * 1.1]);
     next = L[i] + GCELL * 0.5;

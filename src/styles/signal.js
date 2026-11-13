@@ -8,7 +8,7 @@ const SW = [poly(3, 0), poly(4, 45), poly(4, 0), poly(6, 0), poly(5, 0)];
 export const signals = [
   ['Tetra', '#ff2e97', 'tetra'], ['Cube', '#4d8bff', 'cube'], ['Octa', '#b6ff1a', 'octa'], ['Icosa', '#ff8a2a', 'icosa'], ['Dodeca', '#eef2ff', 'dodeca'],
 ].map(([name, c, wire], i) => ({ name, accent: c, glow: c, glowA: 0, wire, live: true, make: () => [F(1, c)], swatch: SW[i](c), swatchFor: SW[i] }));
-const SOLID = c => pic("<path d='M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5z'/><path d='M12 7.2l5.2 8.6H6.8zM12 2.5v4.7M3.8 16.75l3-0.95M20.2 16.75l-3-0.95M3.8 7.25l3 8.55M20.2 7.25l-3 8.55M3.8 7.25L12 7.2l8.2 0.05M6.8 15.8L12 21.5l5.2-5.7' stroke-width='1.2'/>")(c);
+const SOLID = c => pic("<path d='M12 2.5l8.2 4.75v9.5L12 21.5l-8.2-4.75v-9.5zM12 12v9.5M12 12L3.8 7.25M12 12l8.2-4.75' stroke-width='1.7'/>")(c);   // a cube
 const NODEPIC = c => pic("<path d='M4 20L15.5 8.5'/><rect x='13.5' y='3.5' width='7' height='7' fill='FILL' stroke='none'/>")(c);
 // Solids (v25): one brush for all five; each solid along the line is picked by how fast the hand was moving there
 export const solids = { name: 'Solids', label: 'Solids', accent: '#4d8bff', glow: '#4d8bff', glowA: 0, wire: 'auto', live: true, make: () => [F(1, '#4d8bff')], swatch: '#4d8bff', swatchFor: c => SOLID(c) };

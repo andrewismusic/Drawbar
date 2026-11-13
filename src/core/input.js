@@ -76,7 +76,7 @@ export function finishStroke(e) {
   if (Math.hypot(p.x - last[0], p.y - last[1]) > 0.002) cur.pts.push([p.x, p.y, t, pressureOf(e)]);
   const pts = cur.pts.length > 2 ? smoothStroke(cur.pts, cur.size) : cur.pts;
   const S = sessionNow();
-  const s = { id: takeId(), tool: cur.tool, color: cur.color, size: cur.size, fx: MATS[cur.color].live ? score.fx : undefined, tint: cur.tint, pts, start: S, startBeat: Math.round(beatAt(S) * 4) / 4 };
+  const s = { id: takeId(), tool: TOOL[cur.tool].as || cur.tool, head: cur.tool === 'trace' || undefined, color: cur.color, size: cur.size, fx: MATS[cur.color].live ? score.fx : undefined, tint: cur.tint, pts, start: S, startBeat: Math.round(beatAt(S) * 4) / 4 };
   cur = null;
   prepare(s);
   checkpoint();

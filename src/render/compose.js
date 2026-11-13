@@ -20,7 +20,7 @@ import { stampPts, stampShape } from './stamps.js';
 import { drawLive, liveFrame } from './glitchfx.js';
 import { pulseFrame } from '../sound/pulse.js';
 import { drawSpaceBg, drawTwinkles } from './space.js';
-import { drawMicroBg } from './micro.js';
+import { drawMicroBg, drawPaperBg } from './micro.js';
 
 export const cv = $('cv'), ctx = cv.getContext('2d');
 export const fb = document.createElement('canvas'), fctx = fb.getContext('2d');
@@ -63,7 +63,7 @@ export function ensureCanvases() {
   fb.width = fw; fb.height = fh;
   glowC.width = glowS.width = glowT.width = Math.max(8, Math.round(fw / 6)); glowC.height = glowS.height = glowT.height = Math.max(8, Math.round(fh / 6));
   trimPool(pool, 0); trimPool(poolB, 0);
-  ITEMS = []; relight = null; fade = null; groupsDirty = true;
+  ITEMS = []; relight = null; fade = null; groupsDirty = true; pending.length = 0;
 }
 export function frameNorm(c, can) {
   const cd = cellDims();
@@ -127,7 +127,7 @@ export function computeHidden() { const J = hiddenStart(); hiddenStep(J, Infinit
 let hiddenAt = 0, hiddenJob = null, softWanted = false;
 export function checkHiddenSoon(wait = 250) { hiddenAt = performance.now() + wait; hiddenJob = null; }
 function stepHiddenCheck(now) {
-  if (!hiddenAt || now < hiddenAt || cur || erasing) return;
+  if (!hiddenAt || now < hiddenAt || cur || erasing || pending.length) return;
   if (!hiddenJob) hiddenJob = hiddenStart();
   if (!hiddenStep(hiddenJob, 3)) return;
   const hid = hiddenJob.hid, live = new Set(score.strokes);
@@ -182,7 +182,7 @@ export function stepRelight(now) {
   }
   setComposeRot(saved);
   if (R.i >= S.length) {
-    relight = null;
+    relight = null; pending.length = 0;
     if (R.direct) { trimPool(pool, R.gi); return; }
     // A redraw that took a single frame just appears; a longer one fades in
     if (!(R.build && R.frames === 1)) fade = { old: ITEMS, t0: now, both: R.build };
@@ -204,7 +204,8 @@ function glowOf(g, s) {
 // picture is drawn out of sight and faded in; with nothing on screen yet, strokes appear as they are drawn.
 let buildBudget = 150, frameDt = 16;
 function startBuild(rot) {
-  groupsDirty = false; fade = null;
+  groupsDirty = false; fade = null; pending.length = 0;
+  buildBudget = Math.min(buildBudget, 200);   // start gently: the last build's budget says nothing about this picture
   lightNeeded = score.strokes.some(s => isStill(s) && MATS[s.color].lit);
   const direct = !ITEMS.length, g = direct ? gsctx : gtctx;
   g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, g.canvas.width, g.canvas.height);
@@ -219,7 +220,7 @@ function trimPool(list, used) {
 // Leaving a tab: drop its cached layers and any re-lighting in progress, and let the next tab measure its own speed
 export function releaseCanvases() {
   trimPool(pool, 0); trimPool(poolB, 0);
-  ITEMS = []; relight = null; fade = null; groupsDirty = true;
+  ITEMS = []; relight = null; fade = null; groupsDirty = true; pending.length = 0;
   if (quality !== 1) { quality = 1; relayout(); }
   slowFor = fastFor = 0; frameEma = 16; buildBudget = 150;
 }
@@ -242,15 +243,30 @@ export function appendStroke(s) {
     top = { canvas: c, x }; ITEMS.push(top);
   }
   if (M.lit) lightNeeded = true;
+  glowOf(gsctx, s);
+  // The copies are drawn a few per frame (v27): all of them at once was the freeze after a stroke at heavy settings
+  // (the browser paints after we return, so 16 copies of a costly stroke held one frame for 70-150 ms)
+  pending.push({ s, top, next: 0, n: 1 });
+  if (pending.length === 1) stepAppend(true);
+}
+// New strokes whose copies are still being drawn, oldest first (one at a time, so strokes keep their order)
+const pending = [];
+function stepAppend(first) {
+  const p = pending[0], s = p.s;
+  // How many copies this frame: one in the frame the stroke ends in (the copy under the finger; that frame is already
+  // busy), then doubling while frames stay quick and halving when one runs long. Counting copies and watching the
+  // real frame gap needs no guess at what a copy costs (the browser paints after we return).
+  if (first) p.n = 1; else p.n = frameDt > 30 ? Math.max(1, p.n >> 1) : frameDt < 21 ? p.n * 2 : p.n;
   const saved = composeRot;
   setComposeRot(litRot);
-  frameNorm(top.x, top.canvas);
-  forCopies(top.x, () => drawShape(top.x, s._shape, opsOf(s)), s);
+  frameNorm(p.top.x, p.top.canvas);
+  const n = syncDraw ? 1e9 : p.n, total = forCopies(p.top.x, () => drawShape(p.top.x, s._shape, opsOf(s)), s, p.next, p.next + n);
+  p.next += n;
   setComposeRot(saved);
-  glowOf(gsctx, s);
+  if (p.next >= total) { pending.shift(); if (pending.length) pending[0].n = 1; }
 }
 export function renderGroups(rot = 0) {
-  relight = null; fade = null;
+  relight = null; fade = null; pending.length = 0;
   const t0 = performance.now();
   setComposeRot(litRot = rot); litAt = t0;
   ITEMS = [];
@@ -337,7 +353,7 @@ export function drawPreview(X) {
 }
 export function drawGuides(B, rot) {
   const m = score.mode, ext = Math.hypot(geo.W, geo.H) / 2 / geo.R + 0.05;
-  ctx.strokeStyle = world().render.bg === 'micro' ? 'rgba(70,60,100,0.14)' : '#1c2132'; ctx.lineWidth = 0.003; ctx.beginPath();
+  ctx.strokeStyle = world().render.bg ? 'rgba(70,60,100,0.14)' : '#1c2132'; ctx.lineWidth = 0.003; ctx.beginPath();
   if (m === 'kaleido' && score.spiral < 0.04) {
     ctx.save(); ctx.rotate(rot);
     const n = COPIES[score.copies] * (score.mirror ? 2 : 1);
@@ -397,7 +413,8 @@ export function frame(now) {
   stepHiddenCheck(now);
   if (groupsDirty && syncDraw) { renderGroups(rot); softWanted = false; }
   else if ((groupsDirty || (softWanted && !fade)) && !(relight && relight.build)) { softWanted = false; startBuild(rot); }
-  if (relight) stepRelight(now);
+  if (pending.length && !groupsDirty) stepAppend();
+  else if (relight) stepRelight(now);
   else if (!fade && lightNeeded && !world().render.fixedLight && rot !== litRot && Math.abs(mod(rot - litRot + Math.PI, TAU) - Math.PI) > 0.1) relight = { rot: rot + 0.03, i: 0, gi: 0, items: [], cur: null };
   if (fade && now - fade.t0 > (fade.both ? 120 : 160)) fade = null;
   setComposeRot(rot);
@@ -427,7 +444,7 @@ export function frame(now) {
     forCopies(gctx, () => gctx.stroke(path), it.s);
     gctx.globalAlpha = 1;
   }
-  if (world().render.twinkle && !reduceMotion.matches) { frameNorm(fctx, fb); drawTwinkles(fctx, score.strokes, HIDDEN, S, score.mode === 'free' ? 7 : 1); }
+  if (world().render.twinkle && !reduceMotion.matches) { frameNorm(fctx, fb); drawTwinkles(fctx, score.strokes, HIDDEN, S, score.mode === 'free' ? 7 : 0); }
   frameNorm(fctx, fb);
   drawPreview(fctx);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
@@ -437,6 +454,7 @@ export function frame(now) {
   if (geo.wide) ctx.rect(-W / 2 / geo.R, -H / 2 / geo.R, W / geo.R, H / geo.R); else ctx.arc(0, 0, 1, 0, TAU);
   ctx.fillStyle = discGrad; ctx.fill(); ctx.clip();
   if (world().render.space) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); drawSpaceBg(ctx, W, H); ctx.restore(); }
+  if (world().render.bg === 'paper') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); drawPaperBg(ctx, W, H); ctx.restore(); }
   if (world().render.bg === 'micro') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); drawMicroBg(ctx, W, H); ctx.restore(); }
   drawGuides(B, rot);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';

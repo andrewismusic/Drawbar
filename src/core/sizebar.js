@@ -9,7 +9,7 @@ import { geo } from '../render/compose.js';
 import { ink } from '../worlds/index.js';
 
 export const sizeCv = $('sizeCv');
-export const DEF_BRUSH = 60, DEF_ERASE = 45;
+export const DEF_BRUSH = 50, DEF_ERASE = 50;
 // Real size on screen. The eraser can be bigger than the control, so its whole range is scaled to fit instead.
 export function sizeDia() {
   const maxD = $('sizeBar').clientHeight - 4, er = ui.tool === 'erase';
@@ -28,7 +28,7 @@ export function drawSizeBar() {
   if (er) {
     g.fillStyle = '#000'; g.fill();
     g.save(); g.shadowColor = 'rgba(236,232,220,0.75)'; g.shadowBlur = 6; g.strokeStyle = 'rgba(236,232,220,0.9)'; g.lineWidth = 1.5; g.stroke(); g.restore();
-  } else { g.fillStyle = ink(); g.fill(); }
+  } else { g.fillStyle = ink(); g.fill(); g.strokeStyle = 'rgba(236,232,220,0.4)'; g.lineWidth = 1; g.stroke(); }
   el.setAttribute('aria-valuenow', Math.round(v));
   el.setAttribute('aria-label', er ? 'Eraser size' : TOOL[ui.tool].stamp ? 'Stamp size' : 'Brush size');
 }

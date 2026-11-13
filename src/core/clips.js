@@ -20,7 +20,7 @@ export function packState() {
   const strokes = st.strokes.map(s => {
     const a = new Int16Array(s.pts.length * 4);
     s.pts.forEach((p, i) => { a[i * 4] = clamp(Math.round(p[0] * 8000), -32767, 32767); a[i * 4 + 1] = clamp(Math.round(p[1] * 8000), -32767, 32767); a[i * 4 + 2] = clamp(Math.round(p[2] * 100), 0, 32767); a[i * 4 + 3] = Math.round((p[3] ?? 0.5) * 1000); });
-    return { i: s.id, t: s.tool, c: s.color, z: Math.round(s.size * 1000) / 1000, f: s.fx, k: s.tint, b: Math.round(((s.startBeat || 0) - b0) * 4) / 4 || undefined, p: b64(new Uint8Array(a.buffer)) };
+    return { i: s.id, t: s.tool, c: s.color, z: Math.round(s.size * 1000) / 1000, f: s.fx, k: s.tint, h: s.head ? 1 : undefined, b: Math.round(((s.startBeat || 0) - b0) * 4) / 4 || undefined, p: b64(new Uint8Array(a.buffer)) };
   });
   return JSON.stringify({ v: 2, set: st.set, mix: { ...mix }, strokes });
 }
@@ -29,7 +29,7 @@ export function unpackState(json) {
   const strokes = o.strokes.map(s => {
     const by = unb64(s.p), a = new Int16Array(by.buffer, by.byteOffset, by.length / 2), pts = [];
     for (let i = 0; i < a.length; i += 4) pts.push([a[i] / 8000, a[i + 1] / 8000, a[i + 2] / 100, a[i + 3] / 1000]);
-    return { id: s.i, tool: s.t, color: s.c, size: s.z, fx: s.f, tint: s.k, pts, start: S + (s.b || 0) * 60 / score.tempo, startBeat: sb + (s.b || 0) };   // b: its start relative to the clip's first stroke, so loops keep their offsets
+    return { id: s.i, tool: s.t, color: s.c, size: s.z, fx: s.f, tint: s.k, head: s.h ? true : undefined, pts, start: S + (s.b || 0) * 60 / score.tempo, startBeat: sb + (s.b || 0) };   // b: its start relative to the clip's first stroke, so loops keep their offsets
   });
   // Before v24 (clip version 2) Size only applied in free mode
   if ((o.v || 1) < 2 && o.set.mode !== 'free') o.set.fscale = 50;

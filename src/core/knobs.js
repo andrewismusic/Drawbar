@@ -43,8 +43,10 @@ export function knob(el, o) {
     if (v === o.get()) return;
     o.set(v); k.draw();
   };
-  let drag = null;
-  el.addEventListener('pointerdown', e => { if (off()) return; drag = { y: e.clientY, x: e.clientX, v: o.get(), started: false }; try { el.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
+  let drag = null, lastTap = 0;
+  // Double tap (or double click): back to the default, where there is one
+  const reset = () => { const d = o.def ? o.def() : null; if (d == null) return false; o.onStart && o.onStart(); put(d); o.onEnd && o.onEnd(); return true; };
+  el.addEventListener('pointerdown', e => { if (off()) return; const now = performance.now(); if (now - lastTap < 330 && reset()) { lastTap = 0; drag = null; e.preventDefault(); return; } lastTap = now; drag = { y: e.clientY, x: e.clientX, v: o.get(), started: false }; try { el.setPointerCapture(e.pointerId); } catch (err) {} e.preventDefault(); });
   el.addEventListener('pointermove', e => {
     if (!drag) return;
     const [lo, hi] = o.range(), nv = drag.v + ((e.clientX - drag.x) - (e.clientY - drag.y)) * (hi - lo) / pxOf();
@@ -53,7 +55,6 @@ export function knob(el, o) {
   });
   const end = () => { if (drag) { if (drag.started) o.onEnd && o.onEnd(); drag = null; } };
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
-  el.addEventListener('dblclick', () => { const d = o.def ? o.def() : null; if (off() || d == null) return; o.onStart && o.onStart(); put(d); o.onEnd && o.onEnd(); });
   el.addEventListener('keydown', e => {
     if (off()) return;
     const [lo, hi] = o.range(), u = isInt() ? 1 : (hi - lo) / 50;
@@ -89,14 +90,14 @@ export function initKnobs() {
     fmt: v => Math.round(v), color: () => '#ece8dc',
   });
   pk1 = knob($('pk1'), {
-    range: () => capped(pm(), P1[pm()][0], P1[pm()].slice(1, 3)), int: true, px: () => pm() === 'kaleido' ? 140 : pm() === 'free' ? 220 : 90, def: () => pm() === 'free' ? 50 : null,
+    range: () => capped(pm(), P1[pm()][0], P1[pm()].slice(1, 3)), int: true, px: () => pm() === 'kaleido' ? 140 : pm() === 'free' ? 220 : 90, def: () => pm() === 'free' ? 50 : world().start[P1[pm()][0]],
     get: () => score[P1[pm()][0]],
     set: v => { score[P1[pm()][0]] = v; redrawSoon(); },
     fmt: v => P1[pm()][4](v),
     color: ink, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
   });
   pk2 = knob($('pk2'), {
-    range: () => capped(pm(), P2[pm()][0], P2[pm()].slice(1, 3)), int: () => P2[pm()][5], px: () => pm() === 'kaleido' ? 160 : 90, def: () => pm() === 'kaleido' ? 0 : null,
+    range: () => capped(pm(), P2[pm()][0], P2[pm()].slice(1, 3)), int: () => P2[pm()][5], px: () => pm() === 'kaleido' ? 160 : 90, def: () => pm() === 'kaleido' ? 0 : world().start.turns,
     get: () => score[P2[pm()][0]],
     set: v => { score[P2[pm()][0]] = P2[pm()][5] ? v : Math.round(v * 100) / 100; redrawSoon(); },
     fmt: v => P2[pm()][4](v),

@@ -12,11 +12,11 @@ import comic from './comic.js';
 import garden from './garden.js';
 import geometric from './geometric.js';
 import glitch from './glitch.js';
-import graffiti from './graffiti.js';
 import space from './space.js';
-import micro from './micro.js';
+import paint from './paint.js';
 
-export const WORLDS = [materials, comic, garden, geometric, glitch, space, micro, graffiti, classic];
+// Micro and Graffiti were removed as styles in v27 (their materials stay in MATS, so old drawings still open, in Classic)
+export const WORLDS = [paint, materials, comic, garden, geometric, glitch, space, classic];
 // The tabs on offer (Classic is legacy: see worlds/classic.js)
 export const TABS = WORLDS.filter(w => !w.legacy);
 export const WORLD = Object.fromEntries(WORLDS.map(w => [w.id, w]));

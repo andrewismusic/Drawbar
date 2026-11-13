@@ -2,6 +2,9 @@ export const TOOLS = [
   { id: 'glow', name: 'Brush', kind: 'static', icon: '<path d="M4 16c4-8 12 0 16-8" stroke-width="3.2"/>' },
   { id: 'beads', name: 'Beads', kind: 'static', icon: '<g fill="currentColor" stroke="none"><circle cx="5" cy="16" r="2.6"/><circle cx="10.5" cy="12" r="2.2"/><circle cx="15.5" cy="10.2" r="2"/><circle cx="20" cy="7.6" r="2.4"/></g>' },
   { id: 'loop', name: 'Loop', kind: 'anim', icon: '<path d="M19 12a7 7 0 1 1-2.1-5"/><path d="M17.5 3.5v4h-4"/>' },
+  // Trace (Glitch): a loop that leaves nothing behind: only the moving tip of the gesture shows, going round and round.
+  // Stored as a loop stroke with head: true, so the music treats it exactly as a loop.
+  { id: 'trace', name: 'Trace', kind: 'anim', as: 'loop', icon: '<path d="M19 12a7 7 0 1 1-2.1-5" stroke-dasharray="1.5 3.2"/><circle cx="17" cy="7" r="2.6" fill="currentColor" stroke="none"/>' },
   { id: 'ripple', name: 'Ripple', kind: 'drone', icon: '<path d="M3 12c2-4 4-4 6 0s4 4 6 0 4-4 6 0"/>' },
   // Stamps (Geometric): tap to stamp at the size bar's size, or press and drag to set size and turn. stamp: the shape;
   // voice: which tool's instrument plays them (stamps borrow Beads', so maps need no new choices)
