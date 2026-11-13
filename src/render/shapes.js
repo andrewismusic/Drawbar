@@ -93,22 +93,25 @@ export function extraPieces(s, kind, xs, ys, nx, ny, w, L, n, w0) {
     }
   }
   if (kind === 'bristle') {
-    // Brush ink: a bundle of bristles across the line's width. Each runs out of ink at its own point and skips more
-    // and more toward the end (a dry brush). Thin segments, all wound the same way.
-    const B = out.br = new Path2D(), nb = 13, len = L[n - 1] || 1e-6, step = Math.max(1, Math.floor(n / 70));
+    // Brush ink (v26): the whole mark is brush hairs, no solid body. About 24 hairs lie side by side across the width,
+    // wide enough to close up where the brush is loaded. Each hair carries its own load of ink, so they give out at
+    // different places (some early, some never); fast parts of the stroke run drier; a few hairs are split from the
+    // start and leave hair-thin gaps even in the wet part; and the hairs start and stop raggedly.
+    const B = out.br = new Path2D(), nb = 24, len = L[n - 1] || 1e-6, step = Math.max(1, Math.floor(n / 80)), sp = s._sp;
     for (let b = 0; b < nb; b++) {
-      const lat = (b / (nb - 1)) * 2 - 1, dry = 0.35 + 0.65 * rnd(), hw = w0 * (0.06 + 0.06 * rnd()), ph = rnd() * 40, runs = 0.5 + rnd() * 0.5;
-      let a = 0, on = true;
+      const lat = ((b + 0.5) / nb) * 2 - 1 + (rnd() - 0.5) * 0.05, edge = Math.abs(lat);
+      const load = 0.55 + 1.5 * rnd() * rnd() + (rnd() < 0.2 ? 1.2 : 0) - edge * 0.25;   // how far this hair's ink lasts (in stroke lengths)
+      const split = rnd() < 0.14, wide = (split ? 0.5 : 1.25 + 0.5 * rnd()) / nb, ph = rnd() * 60, f1 = 0.5 + rnd(), f2 = 0.21 + 0.3 * rnd();
+      const u0 = rnd() * rnd() * 0.05, u1 = 1 - rnd() * rnd() * 0.08;
+      let a = 0;
       for (let i = step; a < n - 1; i += step) {
-        const e = Math.min(i, n - 1), u = L[e] / len;
-        // Ink left along the line: full at the start, thinning past each bristle's own point; gaps come in runs
-        const ink = 1.25 - Math.pow(u / runs, 2.2) * dry, gap = 0.5 + 0.5 * Math.sin(u * len / w0 * 0.9 + ph) * Math.sin(u * len / w0 * 0.37 + ph * 1.7);
-        on = ink > gap * 1.05;
-        if (on) {
-          const ax = xs[a] + nx[a] * lat * w[a] * 0.92, ay = ys[a] + ny[a] * lat * w[a] * 0.92, bx = xs[e] + nx[e] * lat * w[e] * 0.92, by = ys[e] + ny[e] * lat * w[e] * 0.92;
-          const dx = bx - ax, dy = by - ay, dl = Math.hypot(dx, dy) || 1e-6, px = -dy / dl * hw, py = dx / dl * hw;
-          B.moveTo(ax - px, ay - py); B.lineTo(bx - px, by - py); B.lineTo(bx + px, by + py); B.lineTo(ax + px, ay + py); B.closePath();
-          B.moveTo(bx + hw, by); B.arc(bx, by, hw, 0, TAU);
+        const e = Math.min(i, n - 1), u = L[e] / len, d = L[e] / w0;
+        // Ink left: falls as the hair's load is used up, faster where the hand moved fast; skips come in runs
+        const dry = u / load + 0.35 * Math.min(sp[e] / 2.5, 1), skip = 0.5 + 0.5 * Math.sin(d * f1 + ph) * Math.sin(d * f2 + ph * 1.7);
+        if (u >= u0 && u <= u1 && dry < 0.55 + skip * 0.75 && !(split && skip > 0.72)) {
+          const ka = lat * w[a] * 0.96, kb = lat * w[e] * 0.96, ax = xs[a] + nx[a] * ka, ay = ys[a] + ny[a] * ka, bx = xs[e] + nx[e] * kb, by = ys[e] + ny[e] * kb;
+          const dx = bx - ax, dy = by - ay, dl = Math.hypot(dx, dy) || 1e-6, thin = dry > 0.8 ? 0.6 : 1, ha = w[a] * wide * thin, hb = w[e] * wide * thin, ux = dx / dl, uy = dy / dl, o = dl * 0.12;
+          B.moveTo(ax - ux * o + uy * ha, ay - uy * o - ux * ha); B.lineTo(bx + ux * o + uy * hb, by + uy * o - ux * hb); B.lineTo(bx + ux * o - uy * hb, by + uy * o + ux * hb); B.lineTo(ax - ux * o - uy * ha, ay - uy * o + ux * ha); B.closePath();
         }
         a = e;
       }

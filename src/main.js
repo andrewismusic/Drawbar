@@ -27,7 +27,7 @@ rearrange();
 {
   let pend = 0;
   const ro = new ResizeObserver(() => { if (!pend) pend = requestAnimationFrame(() => { pend = 0; layout(); }); });
-  for (const id of ['main', 'panel', 'knobRow', 'sizeBar']) ro.observe($(id));
+  for (const id of ['main', 'panel']) ro.observe($(id));
 }
 // Reopen the style tab used last time
 switchWorld(TABS.some(w => w.id === prefs.world) ? prefs.world : 'comic');

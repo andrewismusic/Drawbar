@@ -52,11 +52,11 @@ function setup(s) {
     for (let k = 0; k < N; k++) g.pc.push({ i: Math.floor(r() * n), rad: (0.25 + 1.9 * r() * r()), th: r() * TAU, sp: (r() < 0.5 ? -1 : 1) * (0.4 + 1.8 * r()), sz: 0.6 + 0.9 * r() });
   }
   if (M.wire || M.nodes) {
-    const base = NEON_W * s._sz * (s.tool === 'beads' ? 1.6 : 2.8) * (M.nodes ? 0.5 : 1), gap = Math.max(base * 2.3, s._len / (M.nodes ? 16 : 9));   // at most about 9 solids (16 nodes) a stroke
+    const base = NEON_W * s._sz * (s.tool === 'beads' ? 1.6 : 2.8) * (M.nodes ? 0.5 : 1), gap = M.nodes ? Math.max(0.13, base * 4, s._len / 7) : Math.max(base * 2.3, s._len / 9);   // at most about 9 solids a stroke; nodes sit far apart, so the line between them only roughly follows the hand
     g.els = []; g.lw = clamp(base * 0.085, 0.0022, 0.006);
     let next = 0;
     for (let i = 0; i < n; i++) {
-      if (L[i] < next && !(i === n - 1 && !g.els.length)) continue;
+      if (L[i] < next && !(i === n - 1 && (!g.els.length || (M.nodes && L[i] - L[g.els[g.els.length - 1].i] > gap * 0.4)))) continue;
       // Solids: the faster the hand was moving here, the more faces (4, 6, 8, 12, 20)
       const v = speedN(s._sp[i]), kind = M.wire === 'auto' ? (v < 0.12 ? 'tetra' : v < 0.26 ? 'cube' : v < 0.45 ? 'octa' : v < 0.7 ? 'dodeca' : 'icosa') : M.wire;
       g.els.push({ i, kind, x: s._xs[i], y: s._ys[i], R: base * (0.7 + 0.6 * r()), a: [r() * TAU, r() * TAU], w: [(r() - 0.5) * 2.6, (r() - 0.5) * 2.6], t: s.pts[i][2] });
@@ -168,7 +168,7 @@ function livePts(s, g, S, T, slot, e) {
   return m;
 }
 const LIVE = {
-  // Oscilloscope: the line carries a travelling wave, taller on its notes; small ticks mark the scale
+  // Oscilloscope: the line carries a travelling wave, taller on its notes
   scope(s, g, S, m, e) {
     const P = new Path2D(), px = g.px, py = g.py, L = s._L, w = s._w, lam = g.base * 1.1, k = 0.7 + 1.3 * Math.min(e, 1.2);
     for (let i = 0; i < m; i++) {
@@ -176,7 +176,6 @@ const LIVE = {
       const x = px[i] + s._nx[i] * a, y = py[i] + s._ny[i] * a;
       if (i) P.lineTo(x, y); else P.moveTo(x, y);
     }
-    for (let i = 0; i < m; i += 12) { const t = w[i] * 0.35, o = w[i] * 2.3; for (const sd of [-1, 1]) { P.moveTo(px[i] + s._nx[i] * (o - t) * sd, py[i] + s._ny[i] * (o - t) * sd); P.lineTo(px[i] + s._nx[i] * (o + t) * sd, py[i] + s._ny[i] * (o + t) * sd); } }
     return { line: P };
   },
   // Level bars standing across the line, each bouncing at its own pace and jumping on the stroke's notes
@@ -247,65 +246,112 @@ const LIVE = {
     return { line: P };
   },
 };
-// ----- Sort and Mosh (v25): brushes that work on whatever is already painted beneath them. A live stroke is drawn in
-// its turn, so the picture so far is there to read: the patch under the stroke is copied once to a spare canvas, then
-// drawn back in pieces, clipped to the stroke. Nothing beneath: only the stroke's own faint trace shows.
+// ----- Sort, Mosh and Blocks: brushes that work on whatever is already painted beneath them. A live stroke is drawn
+// in its turn, so the picture so far is there to read. Inside the stroke's outline the picture is replaced:
+//   sort:   a real pixel sort. A small copy of the patch is read back a few times a second, each column's pixels are
+//           sorted by brightness from a point on down, and it is drawn back in big square pixels
+//   mosh:   datamosh. A snapshot of the patch is kept for a second or two; blocks of that stale picture replace the
+//           live one and slide further off until the next snapshot
+//   blocks: wide strips of the live picture slip sideways, some recoloured
+// With nothing beneath, only the stroke's own faint trace shows. (v25's versions only dragged single rows and blocks
+// about, which showed almost nothing over thin lines.)
 const spare = document.createElement('canvas'), spx = spare.getContext('2d');
+const FLIPC = ['#00e5ff', '#ff2bd6', '#fff35c', '#ffffff'];
+function sortPatch(u, g, slot) {
+  const W = u.c.width, H = u.c.height, im = u.x.getImageData(0, 0, W, H), d = im.data, col = new Array(H);
+  for (let x = 0; x < W; x++) {
+    const q = hash32(g.seed, x, Math.floor(slot / 8)), r0 = Math.floor(frac(q) * H * 0.55);
+    for (let y = r0; y < H; y++) { const p = (y * W + x) * 4; col[y - r0] = [d[p], d[p + 1], d[p + 2], d[p + 3], (d[p] * 0.3 + d[p + 1] * 0.59 + d[p + 2] * 0.11) * d[p + 3]]; }
+    const part = col.slice(0, H - r0).sort((a, b) => (a[4] - b[4]) * g.dir);
+    for (let y = r0; y < H; y++) { const p = (y * W + x) * 4, v = part[y - r0]; d[p] = v[0]; d[p + 1] = v[1]; d[p + 2] = v[2]; d[p + 3] = v[3]; }
+  }
+  u.x.putImageData(im, 0, 0);
+}
 function drawUnder(X, s, g, S, T, slot, e, c) {
   const M = MATS[s.color], n = s.pts.length;
-  let body = s._shape && s.tool === 'glow' ? s._shape.paths[1] : null;
+  // The patch worked on is three times the brush's width (a brush-wide strip showed too little of the picture)
+  const wide = g.wide || (g.wide = s._w.map(v => v * 3));
+  let body = s.tool === 'glow' ? g.body || (g.body = buildShape(capsAlong(s._xs, s._ys, wide, 0, n - 1, 3), [], [1], g.base, 0).paths[1]) : null;
   if (!body) {
     let m = n - 1;
     if (T !== Infinity) { m = 0; while (m < n - 1 && s.pts[m + 1][2] <= T) m++; if (m < 1) return; }
     let xs = s._xs, ys = s._ys;
     if (s.tool === 'ripple') { for (let i = 0; i < n; i++) { const off = sway(s, i, S); s._rx[i] = s._xs[i] + s._nx[i] * off; s._ry[i] = s._ys[i] + s._ny[i] * off; } xs = s._rx; ys = s._ry; }
-    body = buildShape(capsAlong(xs, ys, s._w, 0, m, 3), [], [1], g.base, 0).paths[1];
+    body = buildShape(capsAlong(xs, ys, wide, 0, m, 3), [], [1], g.base, 0).paths[1];
   }
-  const cvs = X.canvas, b = s._bb;
+  const cvs = X.canvas, b = g.bb, un = g.un || (g.un = []);
+  let copy = 0;
   forCopies(X, () => {
-    // The stroke's own trace, so it is never invisible
-    X.globalAlpha = 0.13 + 0.1 * Math.min(e, 1); X.fillStyle = c; X.fill(body);
-    if (s.tool === 'glow') { X.globalAlpha = 0.6; X.strokeStyle = c; X.lineWidth = clamp(g.base * 0.05, 0.002, 0.004); X.stroke(s._path); }
-    X.globalAlpha = 1;
+    const k = copy++;
     // Where this copy lands on the canvas, in pixels
     const t = X.getTransform(), cx = [b[0], b[2], b[0], b[2]], cy = [b[1], b[1], b[3], b[3]];
     let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
-    for (let k = 0; k < 4; k++) { const x = t.a * cx[k] + t.c * cy[k] + t.e, y = t.b * cx[k] + t.d * cy[k] + t.f; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    for (let q = 0; q < 4; q++) { const x = t.a * cx[q] + t.c * cy[q] + t.e, y = t.b * cx[q] + t.d * cy[q] + t.f; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
     x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0)); x1 = Math.min(cvs.width, Math.ceil(x1)); y1 = Math.min(cvs.height, Math.ceil(y1));
     const w = x1 - x0, h = y1 - y0, unit = Math.max(3, g.base * Math.sqrt(Math.abs(t.a * t.d - t.b * t.c)));
-    if (w < 4 || h < 4) return;
-    if (spare.width < w || spare.height < h) { spare.width = Math.max(spare.width, w); spare.height = Math.max(spare.height, h); }
-    spx.clearRect(0, 0, w, h); spx.drawImage(cvs, x0, y0, w, h, 0, 0, w, h);
+    const trace = () => {   // the stroke's own trace, so it is never invisible
+      X.globalAlpha = 0.03 + 0.04 * Math.min(e, 1); X.fillStyle = c; X.fill(body);
+      if (s.tool === 'glow') { X.globalAlpha = 0.35; X.strokeStyle = c; X.lineWidth = clamp(g.base * 0.04, 0.0015, 0.003); X.stroke(s._path); }
+      X.globalAlpha = 1;
+    };
+    if (w < 6 || h < 6 || k > 5) { trace(); return; }
     X.save(); X.clip(body); X.setTransform(1, 0, 0, 1, 0, 0);
     if (M.under === 'sort') {
-      // Pixel sort: in most columns, one row of the picture is dragged out into a long streak
-      const cw = Math.max(2, Math.round(Math.max(unit * 0.22, w / 90)));
-      for (let j = 0, x = 0; x < w; j++, x += cw) {
-        const q = hash32(g.seed, j, Math.floor(slot / (g.hold + j % 3 + 2)));
-        if (q % 4 === 0) continue;
-        const ys = Math.floor(frac(q) * h * 0.85), ln = Math.min(h, Math.round(h * (0.12 + 0.5 * frac(q >>> 8)) * (0.7 + 0.8 * e) * g.reach));
-        X.drawImage(spare, x, ys, cw, 1, x0 + x, g.dir > 0 ? y0 + ys : y0 + ys - ln, cw, ln);
+      const px = Math.max(3, unit * 0.3), W = Math.round(clamp(w / px, 6, 80)), H = Math.round(clamp(h / px, 6, 80));
+      let u = un[k];
+      if (!u || u.c.width !== W || u.c.height !== H) { const cc = document.createElement('canvas'); cc.width = W; cc.height = H; u = un[k] = { c: cc, x: cc.getContext('2d', { willReadFrequently: true }), at: -9 }; }
+      if (slot - u.at >= 2) { u.at = slot; u.x.clearRect(0, 0, W, H); u.x.drawImage(cvs, x0, y0, w, h, 0, 0, W, H); sortPatch(u, g, slot); }
+      X.clearRect(x0, y0, w, h);
+      X.imageSmoothingEnabled = false; X.drawImage(u.c, 0, 0, W, H, x0, y0, w, h); X.imageSmoothingEnabled = true;
+    } else if (M.under === 'mosh') {
+      const sc = Math.min(1, 520 / Math.max(w, h)), W = Math.max(4, Math.round(w * sc)), H = Math.max(4, Math.round(h * sc)), every = 7 + g.hold;
+      let u = un[k];
+      if (!u || u.c.width !== W || u.c.height !== H) { const cc = document.createElement('canvas'); cc.width = W; cc.height = H; u = un[k] = { c: cc, x: cc.getContext('2d'), at: -99, n: 0 }; }
+      if (slot - u.at >= every) { u.at = slot; u.n++; u.x.clearRect(0, 0, W, H); u.x.drawImage(cvs, x0, y0, w, h, 0, 0, W, H); }
+      const age = Math.min(1, (slot - u.at + 1) / every), bs = Math.max(8, Math.round(Math.max(unit * 0.7, Math.sqrt(w * h / 160))));
+      for (let by = 0, j = 0; by < h; by += bs) for (let bx = 0; bx < w; bx += bs, j++) {
+        const q = hash32(g.seed, j, u.n), kind = q % 10;
+        if (kind < 3) continue;   // the live picture shows through
+        const dx = kind < 8 ? g.dir * age * bs * 2.4 * g.reach * (0.4 + frac(q >>> 3)) * (1 + e) : 0, dy = kind < 8 ? (frac(q >>> 9) - 0.5) * bs * 1.4 * age : 0;
+        X.clearRect(x0 + bx + dx, y0 + by + dy, bs, bs);
+        // most stale blocks slide; some smear one column of themselves across the block
+        if (kind < 8) X.drawImage(u.c, bx * sc, by * sc, bs * sc, bs * sc, x0 + bx + dx, y0 + by + dy, bs, bs);
+        else X.drawImage(u.c, (bx + bs * frac(q >>> 5)) * sc, by * sc, Math.max(1, sc), bs * sc, x0 + bx, y0 + by, bs, bs);
       }
     } else {
-      // Datamosh: blocks of the picture slide off and snap back, or repeat their neighbour
-      const bs = Math.max(6, Math.round(Math.max(unit * 0.8, Math.sqrt(w * h / 220)))), ph0 = S * 0.3 * g.rate;
-      for (let by = 0, j = 0; by < h; by += bs) for (let bx = 0; bx < w; bx += bs, j++) {
-        const q = hash32(g.seed, j, Math.floor(slot / (g.hold * 3 + 4))), kind = q % 5;
-        if (kind < 2) continue;
-        if (kind === 4) { X.drawImage(spare, Math.max(0, bx - bs), by, bs, bs, x0 + bx, y0 + by, bs * 2, bs); continue; }
-        const ph = mod(ph0 + frac(q >>> 3), 1), dx = g.dir * ph * bs * 2.2 * g.reach * (1 + e), dy = (frac(q >>> 9) - 0.5) * bs * 1.5 * ph;
-        X.drawImage(spare, bx, by, bs, bs, x0 + bx + dx, y0 + by + dy, bs, bs);
+      if (spare.width < w || spare.height < h) { spare.width = Math.max(spare.width, w); spare.height = Math.max(spare.height, h); }
+      spx.clearRect(0, 0, w, h); spx.drawImage(cvs, x0, y0, w, h, 0, 0, w, h);
+      for (let i = 0, nb = 8 + Math.round(4 * e); i < nb; i++) {
+        const q = hash32(g.seed, i, Math.floor(slot / (g.hold + i))), rh = Math.max(4, Math.round(h * (0.04 + 0.1 * frac(q >>> 6)))), ry = Math.round((h - rh) * frac(q >>> 16)), dx = Math.round((frac(q >>> 3) - 0.5) * unit * 3.2 * g.reach * (1 + 0.6 * e)) || Math.round(unit);
+        X.clearRect(x0, y0 + ry, w, rh);
+        X.drawImage(spare, 0, ry, w, rh, x0 + dx, y0 + ry, w, rh);
+        if (q % 3 === 0) { X.globalCompositeOperation = 'source-atop'; X.globalAlpha = 0.85; X.fillStyle = FLIPC[q % FLIPC.length]; X.fillRect(x0, y0 + ry, w, rh); X.globalCompositeOperation = 'source-over'; X.globalAlpha = 1; }
       }
     }
     X.restore();
+    trace();
   }, s);
+}
+// ----- Code: one character per grid cell. Before the first code stroke of a frame is drawn, every code stroke's cells
+// are worked out and each cell is given to the newest stroke that has it; older strokes skip it. So code painted over
+// code changes the colour and nothing overlaps (and nothing else in the cell is touched).
+let owners = null;
+export const liveFrame = () => { owners = null; };
+const cellKey = q => Math.round(q[0] / GCELL) + ',' + Math.round(q[1] / GCELL);
+function claimCells(S, B) {
+  owners = new Map();
+  for (const s of score.strokes) {
+    if (!MATS[s.color].glyph || !s._L) continue;
+    s._cellsNow = liveCells(s, S, reveal(s, S, B));
+    for (const q of s._cellsNow) owners.set(cellKey(q), s.id);
+  }
 }
 const FLIP = ['#00e5ff', '#ff2bd6', '#fff35c', '#ffffff'];
 // Draw one live stroke. X: the frame buffer's context, in drawing space. P: { drum, by } from pulseFrame.
 export function drawLive(X, s, S, B, now, P) {
   const M = MATS[s.color], g = s._gl || setup(s), e = Math.min((P.by.get(s.id) || 0) + 0.5 * P.drum, 1.5);
   const slot = Math.floor(now / 170), T = reveal(s, S, B), c = colorOf(s), tiles = score.mode === 'tiles';
-  let pass, clearCells = null;
+  let pass;
   if (M.under) { drawUnder(X, s, g, S, T, slot, e, c); return; }
   if (M.gl) {
     const m = livePts(s, g, S, T, slot, e), geo = m > 1 ? LIVE[M.gl](s, g, S, m, e, slot) : {};
@@ -333,13 +379,11 @@ export function drawLive(X, s, S, B, now, P) {
       X.translate(-dx, -dy);
     };
   } else {
-    const cells = liveCells(s, S, T);
-    // One character per cell: a code stroke wipes its cells first, so a stroke painted over another replaces it there
-    clearCells = () => { for (const q of cells) X.clearRect(q[0], q[1], GCELL, GCELL); };
+    if (!owners) claimCells(S, B);
+    const cells = (s._cellsNow || liveCells(s, S, T)).filter(q => owners.get(cellKey(q)) === s.id);
     pass = (dx, dy, a, col, op) => { X.globalCompositeOperation = op || 'source-over'; drawCells(X, cells, g, col || c, S, slot, e, dx, dy, a); };
   }
   forCopies(X, () => {
-    if (clearCells) clearCells();
     if (g.fx === 'smear') {
       // Fewer trail copies where each one costs more: glyphs (an image copy per cell) and tiles (many copies of everything)
       const n = tiles ? (M.wire ? 1 : 0) : 2, osc = 0.5 + 0.5 * Math.sin(now / 1000 * g.rate + g.seed % 7), step = 0.011 * g.reach * (0.35 + osc + 1.6 * e) * g.dir;

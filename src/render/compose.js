@@ -17,9 +17,10 @@ import { MATS, colorOf, opsOf } from '../styles/index.js';
 import { pixelScale, world } from '../worlds/index.js';
 import { GCELL, glyphCells, glyphShape, lineSamples } from './glyphs.js';
 import { stampPts, stampShape } from './stamps.js';
-import { drawLive } from './glitchfx.js';
+import { drawLive, liveFrame } from './glitchfx.js';
 import { pulseFrame } from '../sound/pulse.js';
 import { drawSpaceBg, drawTwinkles } from './space.js';
+import { drawMicroBg } from './micro.js';
 
 export const cv = $('cv'), ctx = cv.getContext('2d');
 export const fb = document.createElement('canvas'), fctx = fb.getContext('2d');
@@ -336,7 +337,7 @@ export function drawPreview(X) {
 }
 export function drawGuides(B, rot) {
   const m = score.mode, ext = Math.hypot(geo.W, geo.H) / 2 / geo.R + 0.05;
-  ctx.strokeStyle = '#1c2132'; ctx.lineWidth = 0.003; ctx.beginPath();
+  ctx.strokeStyle = world().render.bg === 'micro' ? 'rgba(70,60,100,0.14)' : '#1c2132'; ctx.lineWidth = 0.003; ctx.beginPath();
   if (m === 'kaleido' && score.spiral < 0.04) {
     ctx.save(); ctx.rotate(rot);
     const n = COPIES[score.copies] * (score.mirror ? 2 : 1);
@@ -404,6 +405,7 @@ export function frame(now) {
   gctx.setTransform(1, 0, 0, 1, 0, 0); gctx.clearRect(0, 0, glowC.width, glowC.height); gctx.drawImage(glowS, 0, 0);
   const fa = fade ? clamp((now - fade.t0) / (fade.both ? 120 : 160), 0, 1) : 1;
   let pulses = null;
+  liveFrame();
   const still = reduceMotion.matches;   // reduced motion: live strokes hold still
   for (let j = 0; j < ITEMS.length; j++) {
     const it = ITEMS[j];
@@ -435,6 +437,7 @@ export function frame(now) {
   if (geo.wide) ctx.rect(-W / 2 / geo.R, -H / 2 / geo.R, W / geo.R, H / geo.R); else ctx.arc(0, 0, 1, 0, TAU);
   ctx.fillStyle = discGrad; ctx.fill(); ctx.clip();
   if (world().render.space) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); drawSpaceBg(ctx, W, H); ctx.restore(); }
+  if (world().render.bg === 'micro') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); drawMicroBg(ctx, W, H); ctx.restore(); }
   drawGuides(B, rot);
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.setTransform(1, 0, 0, 1, 0, 0);

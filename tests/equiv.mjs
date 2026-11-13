@@ -28,14 +28,13 @@ const settings = [
   { mode: 'tiles', tiles: 3, turns: 1, mirror: true },
   { mode: 'tiles', tiles: 4, turns: 4, mirror: false },
 ];
-async function run(url) {
+async function run(url, size) {
   const page = await browser.newPage({ viewport: { width: 1180, height: 820 } });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   await page.addInitScript(() => { performance.now = () => 1000; });
   await page.goto(url); await page.waitForTimeout(500);
   const isNew = await page.evaluate(() => typeof window.arrange !== 'function');
-  // The style tabs and the Sound panel's frame take some height; hide them so both builds get the same canvas size and the pixels can be compared
-  if (isNew) { await page.addStyleTag({ content: '#worldTabs{display:none!important} .knobs.sound{padding:0!important;border:0!important} .knobs .slab{display:none!important}' }); await page.waitForTimeout(300); }
+    if (isNew && size) { await page.evaluate(async ([w, h]) => (await import('/src/core/layout.js')).forceStage(w, h), size); await page.waitForTimeout(300); }
   const results = [];
   for (const map of [417, 73, 908]) {
     for (const st of settings) {
@@ -66,7 +65,8 @@ async function run(url) {
 }
 const urls = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const [refUrl, newUrl] = [urls[0] || 'http://localhost:3001/', urls[1] || 'http://localhost:3000/'];
-const a = await run(refUrl), b = await run(newUrl);
+// The new build's layout differs (no sound row under the drawing), so it is held at the old build's stage size
+const a = await run(refUrl), b = await run(newUrl, [a.results[0].w, a.results[0].h]);
 let fail = 0;
 for (let i = 0; i < a.results.length; i++) {
   const x = a.results[i], y = b.results[i];

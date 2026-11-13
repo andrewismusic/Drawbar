@@ -1,5 +1,5 @@
 // Smoke test: in every style tab, draws in every pattern mode with every tool at three screen sizes.
-// Fails on page errors, page scroll (either direction) or the knobs overlapping the drawing.
+// Fails on page errors, page scroll (either direction) or the controls overlapping the drawing.
 // Run: npx serve . (port 3000) in one terminal, then: node tests/smoke.mjs [url]
 import { chromium } from 'playwright';
 const url = process.argv[2] || 'http://localhost:3000/';
@@ -11,10 +11,11 @@ for (const [name, width, height] of sizes) {
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(url); await page.waitForTimeout(600);
-  const tabs = await page.locator('#worldTabs button:visible').evaluateAll(bs => bs.map(b => b.id.slice(6)));
+  const tabs = await page.evaluate(async () => (await import('/src/worlds/index.js')).TABS.map(w => w.id));
   const results = [];
   for (const tab of tabs) {
-    await page.click('#world-' + tab); await page.waitForTimeout(150);
+    // pick the style from the style picker, as a person would
+    await page.click('#styleBtn'); await page.click('#world-' + tab); await page.waitForTimeout(150);
     const box = await page.locator('#cv').boundingBox();
     const draw = async (pts) => {
       await page.mouse.move(box.x + box.width * pts[0][0], box.y + box.height * pts[0][1]); await page.mouse.down();
@@ -35,8 +36,8 @@ for (const [name, width, height] of sizes) {
     await page.screenshot({ path: `tests/out-${name}-${tab}.png` });
     const check = await page.evaluate(() => {
       const r = id => document.getElementById(id).getBoundingClientRect();
-      const st = r('stage'), kn = r('knobRow'), d = document.documentElement;
-      return { scroll: d.scrollHeight - innerHeight, sideScroll: d.scrollWidth - innerWidth, knobsOverlap: kn.top < st.bottom - 1 && kn.bottom > st.top };
+      const st = r('stage'), kn = r('panel'), d = document.documentElement;
+      return { scroll: d.scrollHeight - innerHeight, sideScroll: d.scrollWidth - innerWidth, knobsOverlap: kn.top < st.bottom - 1 && kn.bottom > st.top && kn.left < st.right - 1 && kn.right > st.left + 1 };
     });
     const ok = check.scroll <= 0 && check.sideScroll <= 0 && !check.knobsOverlap;
     results.push(ok ? tab : `${tab} FAIL ${JSON.stringify(check)}`);

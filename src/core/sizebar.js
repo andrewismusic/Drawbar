@@ -1,63 +1,56 @@
-// Size bar: the whole bar is as thick as the brush, and fills from the left
+// Size control: a circle the size of a button. The filled disc is the brush at its real size on screen: a dot at the
+// smallest, the whole circle at the largest. Drag up or right for bigger, down or left for smaller.
 import { effEraseR } from '../canvas/index.js';
 import { $ } from './dom.js';
 import { clamp } from './math.js';
-import { score, ui } from './state.js';
-import { NEON_W } from './stroke.js';
-import { TOOL, brushSize, eraseRadius, stampRadius } from './tools.js';
+import { ui } from './state.js';
+import { LINE, TOOL, brushSize, eraseRadius, stampRadius } from './tools.js';
 import { geo } from '../render/compose.js';
 import { ink } from '../worlds/index.js';
 
-export const sizeCv = $('sizeCv'), SB_PAD = 4;
-export function pill(g, xa, xb, cy, d) {
-  const r = d / 2;
-  xb = Math.max(xb, xa + d);
-  g.beginPath(); g.moveTo(xa + r, cy - r); g.lineTo(xb - r, cy - r); g.arc(xb - r, cy, r, -Math.PI / 2, Math.PI / 2);
-  g.lineTo(xa + r, cy + r); g.arc(xa + r, cy, r, Math.PI / 2, Math.PI * 1.5); g.closePath();
-}
-// Real size on screen, scaled down only if the largest setting would not fit the bar, so the whole throw stays even
+export const sizeCv = $('sizeCv');
+export const DEF_BRUSH = 60, DEF_ERASE = 45;
+// Real size on screen. The eraser can be bigger than the control, so its whole range is scaled to fit instead.
 export function sizeDia() {
-  const maxD = $('sizeBar').clientHeight - 6, er = ui.tool === 'erase';
-  const dOf = v => er ? eraseRadius(v) * (effEraseR() / eraseRadius(ui.eraseV)) * 2 * geo.Rcss : TOOL[ui.tool].stamp ? 2 * stampRadius(v) * geo.Rcss : 2 * NEON_W * 1.1 * brushSize(v) * geo.Rcss / (score.mode === 'free' ? 1 : 1);
-  const k = Math.min(1, maxD / dOf(100));
-  return Math.max(6, dOf(er ? ui.eraseV : ui.brushV) * k);
+  const maxD = $('sizeBar').clientHeight - 4, er = ui.tool === 'erase';
+  if (!er) return Math.max(3, Math.min(maxD, 2 * (TOOL[ui.tool].stamp ? stampRadius(ui.brushV) : LINE * brushSize(ui.brushV)) * geo.Rcss));
+  const dOf = v => eraseRadius(v) * (effEraseR() / eraseRadius(ui.eraseV)) * 2 * geo.Rcss;
+  return Math.max(5, dOf(ui.eraseV) * Math.min(1, maxD / dOf(100)));
 }
 export function drawSizeBar() {
-  const el = $('sizeBar'), Wd = el.clientWidth, Hd = el.clientHeight, dpr = Math.min(window.devicePixelRatio || 1, 2);
-  if (!Wd) return;
-  if (sizeCv.width !== Math.round(Wd * dpr) || sizeCv.height !== Math.round(Hd * dpr)) { sizeCv.width = Math.round(Wd * dpr); sizeCv.height = Math.round(Hd * dpr); }
-  const g = sizeCv.getContext('2d'), er = ui.tool === 'erase', v = er ? ui.eraseV : ui.brushV, d = sizeDia(), cy = Hd / 2;
-  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, Wd, Hd);
-  const x0 = SB_PAD, x1 = Wd - SB_PAD, xe = x0 + d + (x1 - x0 - d) * v / 100;
-  pill(g, x0, x1, cy, d); g.fillStyle = '#161a28'; g.fill(); g.strokeStyle = '#272c3f'; g.lineWidth = 1; g.stroke();
-  pill(g, x0, xe, cy, d);
+  const el = $('sizeBar'), D = el.clientHeight, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (!D) return;
+  if (sizeCv.width !== Math.round(D * dpr)) sizeCv.width = sizeCv.height = Math.round(D * dpr);
+  const g = sizeCv.getContext('2d'), er = ui.tool === 'erase', v = er ? ui.eraseV : ui.brushV, d = sizeDia(), c = D / 2;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, D, D);
+  g.beginPath(); g.arc(c, c, c - 1, 0, 2 * Math.PI); g.fillStyle = '#161a28'; g.fill(); g.strokeStyle = '#2f3550'; g.lineWidth = 1; g.stroke();
+  g.beginPath(); g.arc(c, c, d / 2, 0, 2 * Math.PI);
   if (er) {
     g.fillStyle = '#000'; g.fill();
-    g.save(); g.shadowColor = 'rgba(236,232,220,0.75)'; g.shadowBlur = 8; g.strokeStyle = 'rgba(236,232,220,0.9)'; g.lineWidth = 1.5; g.stroke(); g.restore();
+    g.save(); g.shadowColor = 'rgba(236,232,220,0.75)'; g.shadowBlur = 6; g.strokeStyle = 'rgba(236,232,220,0.9)'; g.lineWidth = 1.5; g.stroke(); g.restore();
   } else { g.fillStyle = ink(); g.fill(); }
   el.setAttribute('aria-valuenow', Math.round(v));
-  el.setAttribute('aria-label', er ? 'Eraser size' : 'Brush size');
+  el.setAttribute('aria-label', er ? 'Eraser size' : TOOL[ui.tool].stamp ? 'Stamp size' : 'Brush size');
 }
-// Size bar dragging, double tap to reset, arrow keys
+// Dragging, double tap to reset, arrow keys
 export function initSizeBar() {
-  {
-    const el = $('sizeBar');
-    let drag = null, lastTap = 0;
-    const setV = v => { v = clamp(v, 0, 100); if (ui.tool === 'erase') ui.eraseV = v; else ui.brushV = v; drawSizeBar(); };
-    const setFrom = x => { const r = el.getBoundingClientRect(), d = sizeDia(); setV((x - r.left - SB_PAD - d / 2) / Math.max(r.width - 2 * SB_PAD - d, 1) * 100); };
-    el.addEventListener('pointerdown', e => {
-      e.preventDefault();
-      try { el.setPointerCapture(e.pointerId); } catch (err) {}
-      const now = performance.now();
-      if (now - lastTap < 320) { setV(ui.tool === 'erase' ? 45 : 42); lastTap = 0; drag = null; return; }
-      lastTap = now; drag = e.pointerId; setFrom(e.clientX);
-    });
-    el.addEventListener('pointermove', e => { if (drag === e.pointerId) setFrom(e.clientX); });
-    const end = e => { if (drag === e.pointerId) drag = null; };
-    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
-    el.addEventListener('keydown', e => {
-      const d = { ArrowRight: 3, ArrowUp: 3, ArrowLeft: -3, ArrowDown: -3 }[e.key];
-      if (d) { setV((ui.tool === 'erase' ? ui.eraseV : ui.brushV) + d); e.preventDefault(); }
-    });
-  }
+  const el = $('sizeBar');
+  let drag = null, lastTap = 0;
+  const get = () => ui.tool === 'erase' ? ui.eraseV : ui.brushV;
+  const setV = v => { v = clamp(v, 0, 100); if (ui.tool === 'erase') ui.eraseV = v; else ui.brushV = v; drawSizeBar(); };
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try { el.setPointerCapture(e.pointerId); } catch (err) { /* older browsers */ }
+    const now = performance.now();
+    if (now - lastTap < 320) { setV(ui.tool === 'erase' ? DEF_ERASE : DEF_BRUSH); lastTap = 0; drag = null; return; }
+    lastTap = now; drag = { id: e.pointerId, x: e.clientX, y: e.clientY, v: get() }; el.classList.add('dragging');
+  });
+  // The whole range in about 150 px of travel
+  el.addEventListener('pointermove', e => { if (drag && drag.id === e.pointerId) setV(drag.v + ((e.clientX - drag.x) - (e.clientY - drag.y)) / 1.5); });
+  const end = e => { if (drag && drag.id === e.pointerId) { drag = null; el.classList.remove('dragging'); } };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+  el.addEventListener('keydown', e => {
+    const d = { ArrowRight: 3, ArrowUp: 3, ArrowLeft: -3, ArrowDown: -3 }[e.key];
+    if (d) { setV(get() + d); e.preventDefault(); }
+  });
 }

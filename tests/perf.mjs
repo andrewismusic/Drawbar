@@ -30,6 +30,9 @@ const CASES = [
   ['space', 'free, turning, mirror', { mode: 'free', frot: true, fmirror: true }],
   ['space', 'kaleido 8, mirror', { mode: 'kaleido', copies: 6, mirror: true }],
   ['space', 'tiles 4, 4 turns, mirror', { mode: 'tiles', tiles: 4, turns: 3, mirror: true }],
+  ['micro', 'free, turning, mirror', { mode: 'free', frot: true, fmirror: true }],
+  ['micro', 'kaleido 8, mirror', { mode: 'kaleido', copies: 6, mirror: true }],
+  ['micro', 'tiles 4, 4 turns, mirror', { mode: 'tiles', tiles: 4, turns: 3, mirror: true }],
   ['graffiti', 'free, mirror', { mode: 'free', fmirror: true }],
   ['graffiti', 'tiles 3, 2 turns, mirror', { mode: 'tiles', tiles: 3, turns: 1, mirror: true }],
   // Pairings the worlds avoid
@@ -48,7 +51,7 @@ await page.goto(url); await page.waitForTimeout(500);
 console.log('world       case                              strokes  redraw ms   frame ms p50 / p90   re-lighting');
 const only = process.argv[3];   // optional: only cases whose world or label contains this text
 for (const [wid, label, set, avoided, toolsOverride] of CASES.filter(c => !only || (c[0] + ' ' + c[1]).includes(only))) {
-  await page.click('#world-' + wid); await page.waitForTimeout(150);
+  await page.evaluate(async id => (await import('/src/core/settings.js')).switchWorld(id), wid); await page.waitForTimeout(150);
   const r = await page.evaluate(async ({ set, toolsOverride }) => {
     const [st, stroke, settings, compose, worlds, { TOOL }, stamps] = await Promise.all(['core/state.js', 'core/stroke.js', 'core/settings.js', 'render/compose.js', 'worlds/index.js', 'core/tools.js', 'render/stamps.js'].map(p => import('/src/' + p)));
     const w = worlds.world(), tools = (toolsOverride || w.tools).filter(t => t !== 'erase');

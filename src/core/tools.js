@@ -13,7 +13,13 @@ export const TOOLS = [
   { id: 'erase', name: 'Erase', kind: 'erase', icon: '<path d="M8 19h12"/><path d="M4.5 15.5l8-8a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L12 18H7z"/>' },
 ];
 export const TOOL = Object.fromEntries(TOOLS.map(t => [t.id, t]));
-export const brushSize = v => 1.5 * Math.pow(16, v / 100);       // 1.5x to 24x the original line (12x until v23)
+// Brush size: 1.5x the original line up to brushMax x. brushMax is set by the layout so the largest brush is as big
+// on screen as the size control (v26; it was a fixed 24x, far bigger than the control could show at real size).
+export const LINE = 0.0068 * 1.1;   // a 1x line's half-width, in drawing units (NEON_W x 1.1)
+let brushMax = 12;
+export const setBrushMax = m => { brushMax = Math.min(24, Math.max(3, m)); };
+export const brushSize = v => 1.5 * Math.pow(brushMax / 1.5, v / 100);
 export const eraseRadius = v => 0.025 * Math.pow(6, v / 100);    // 0.025 to 0.15 of the drawing radius
-// Stamp size from the size bar, in drawing units (the disc's radius is 1): 0.027 to 0.43
-export const stampRadius = v => 0.018 * brushSize(v);
+// Stamp size from the size control, in drawing units: the same width on screen as a brush at that setting
+// (drag while stamping for anything bigger)
+export const stampRadius = v => LINE * brushSize(v);

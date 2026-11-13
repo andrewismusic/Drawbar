@@ -34,6 +34,7 @@ body{
 
 /* Visual only: the drawing and nothing else, filling the screen. Tap to come back. */
 .app.visual .top, .app.visual .knobs, .app.visual .panel{display:none}
+[hidden]{display:none !important}
 .app.visual .main{position:fixed; inset:0; z-index:30; background:var(--bg); cursor:pointer}
 .app.visual #cv{border-radius:0}
 
@@ -83,16 +84,19 @@ button:disabled{opacity:.35; cursor:default}
 .sound[aria-pressed="true"] .on{display:inline}
 .sound[aria-pressed="true"] .off{display:none}
 @media (max-width:440px){
-  .brand, .vsep{display:none}
+  .brand, .vsep, .top .lab{display:none}
   .top{gap:8px}
   .top .icon{width:38px; min-height:38px}
   #mapInput, .bpm{height:38px}
 }
 
 /* Style tabs: one per world. Scrolls sideways on its own when narrow, never the page. */
-.worlds{position:relative; display:flex; gap:4px; flex:none; min-width:0; overflow-x:auto; scrollbar-width:none; margin-top:-4px}
-.worlds::-webkit-scrollbar{display:none}
-.worlds button{flex:none; min-height:32px; padding:0 13px; border-radius:999px; background:transparent; border-color:transparent; color:var(--muted); font-size:13px}
+.stylewrap{position:relative; flex:none}
+.stylebtn{display:inline-flex; align-items:center; gap:4px; padding:0 8px 0 12px; white-space:nowrap}
+.stylebtn svg{width:16px; height:16px; color:var(--muted)}
+.stylebtn[aria-expanded="true"]{border-color:var(--ink)}
+.worlds{position:absolute; left:0; top:calc(100% + 6px); z-index:40; display:flex; flex-direction:column; gap:2px; min-width:150px; padding:6px; background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 40px var(--shadow)}
+.worlds button{min-height:38px; padding:0 14px; border-radius:8px; background:transparent; border-color:transparent; color:var(--muted); font-size:14px; text-align:left}
 .worlds button:hover{color:var(--fg)}
 .worlds button[aria-selected="true"]{color:var(--bg); background:var(--fg); border-color:var(--fg)}
 
@@ -143,6 +147,11 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .knobs{display:flex; justify-content:center; align-items:flex-start; gap:clamp(18px, 5vw, 44px); flex:none}
 /* The four knobs shape the music only: a labelled, outlined group with a speaker, set apart from the drawing controls */
 .knobs.sound{align-items:center; gap:clamp(10px, 3.4vw, 30px); padding:6px 16px 5px 12px; border:1px solid var(--line); border-radius:14px; background:var(--panel)}
+/* Sound sheet: put away until the Sound button is pressed; then it lies over the bottom of the controls, clear of the drawing */
+.knobs.sound.sheet{position:fixed; z-index:35; left:50%; transform:translateX(-50%); bottom:calc(10px + env(safe-area-inset-bottom, 0px)); width:max-content; max-width:calc(100vw - 20px); box-sizing:border-box; flex-wrap:wrap; row-gap:8px; padding:10px 14px 8px; box-shadow:0 14px 40px var(--shadow)}
+.sheet .srow2{flex:1 0 100%; display:flex; align-items:center; gap:10px; padding-top:6px; border-top:1px solid var(--line)}
+.sheet .srow2 #soundClose{margin-left:auto}
+@media (min-width:880px) and (min-aspect-ratio:5/4){ .knobs.sound.sheet{left:auto; transform:none; right:max(16px, env(safe-area-inset-right, 0px)); width:304px; gap:4px; padding:10px 8px 8px} .knobs.sheet .slab{display:none} .knobs.sheet .kwrap.big{width:68px} }
 .knobs .slab{display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase}
 .knobs .slab svg{width:22px; height:22px}
 .kwrap{display:flex; flex-direction:column; align-items:center; gap:3px}
@@ -167,7 +176,7 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .seg.fx{align-self:flex-start}
 .seg.fx button{min-height:32px; padding:0 9px; font-size:13px}
 /* Tools: a row of up to six (Geometric has five shapes and the eraser) */
-.tools{display:flex; gap:6px; max-width:100%}
+.tools{display:flex; gap:6px; max-width:100%; min-width:0; flex:0 1 auto}
 .tools .tool{flex:0 1 auto; width:52px; min-width:0}
 .tool span{max-width:100%; white-space:nowrap; font-size:10px; letter-spacing:-.01em}
 /* Six tools (Geometric's shapes): slightly smaller labels so all six fit */
@@ -176,9 +185,10 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .tool svg{width:24px; height:24px}
 .tool[aria-pressed="true"]{color:var(--fg); border-color:var(--ink); background:#20253a}
 .tool[aria-pressed="true"] svg{color:var(--ink)}
-.sizegroup{flex:1 1 220px; max-width:330px}
-.sizebar{position:relative; height:50px; width:100%; touch-action:none; cursor:ew-resize}
-.sizebar canvas{display:block; width:100%; height:100%}
+.drawrow{display:flex; align-items:center; gap:10px; max-width:100%}
+.sizedot{flex:none; width:54px; height:54px; border-radius:50%; touch-action:none; cursor:ns-resize}
+.sizedot canvas{display:block; width:100%; height:100%}
+.sizedot.dragging{outline:2px solid var(--ink); outline-offset:2px}
 .swatches{display:grid; grid-template-columns:repeat(10, 28px); gap:5px}
 .sw{width:28px; height:28px; min-height:28px; padding:0; border-radius:50%; border:2px solid transparent; position:relative}
 .sw::after{content:""; position:absolute; inset:3px; border-radius:50%; background:var(--c)}
@@ -191,8 +201,7 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 @media (min-width:880px) and (min-aspect-ratio:5/4){
   .group h2{display:block}
   .prow{min-height:64px; flex-wrap:wrap; row-gap:8px}   /* three knobs and Mirror do not fit beside the pattern buttons: they wrap below */
-  .tools .tool{flex:1 1 0}
-  .sizegroup{flex:none; max-width:none}
+  .tools{flex:1 1 auto} .tools .tool{flex:1 1 0}
   .swatches{grid-template-columns:repeat(10, minmax(0, 1fr)); gap:4px}
   .sw{width:100%; height:auto; aspect-ratio:1; min-height:0}
 }
@@ -237,7 +246,6 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
   .cluster{gap:4px; flex-wrap:nowrap}
   .top .icon{width:34px; min-height:36px} .top .icon svg{width:18px; height:18px}
   #mapInput, .bpm{height:36px} #mapInput{font-size:19px} .bpm{width:68px}
-  .seg.mini button{width:32px; min-height:28px}
   .knobs.sound{gap:2px; padding:4px 6px 3px 6px}
   .kwrap.big{width:56px}
   .knobs .slab{font-size:9px}
@@ -246,6 +254,8 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
   .tools{gap:4px}
   .tools.many .tool span{display:none}
   .tools.many .tool{height:46px}
+  .drawrow{gap:6px} .sizedot{width:46px; height:46px}
+  .stylebtn{padding:0 4px 0 8px; min-height:36px; font-size:13px}
 }
 /* Colour picker: a faint ring, so black shows on the dark panel */
 #colors .sw::after{box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}

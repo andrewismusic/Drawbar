@@ -5,6 +5,7 @@ import { MATS } from '../styles/index.js';
 import { TOOL } from './tools.js';
 import { glyphCells, glyphShape, lineSamples } from '../render/glyphs.js';
 import { growPlant } from '../render/plants.js';
+import { growMicro } from '../render/micro.js';
 import { spaceShape } from '../render/space.js';
 import { stampShape } from '../render/stamps.js';
 
@@ -99,6 +100,10 @@ export function prepare(s) {
       s._shape = glyphShape(glyphCells(lineSamples(xs, ys, w, n - 1, L), s.id), w0);
     } else if (s.tool === 'glow' && M.space) {
       s._shape = spaceShape(M, s.id, { xs, ys, w, L, n, w0 });
+    } else if (s.tool === 'glow' && M.micro) {
+      // Micro: organisms grown along the line. See-through, so they neither hide strokes nor are hidden
+      const pieces = growMicro(M.micro, M.keys, s.id, { xs, ys, nx, ny, w, L, n });
+      s._shape = { paths: { ...pieces, 1: pieces.all }, w0: w0 * 0.9, wd: w0 * 0.9, ink: null, noHide: true };
     } else if (s.tool === 'glow' && M.plant) {
       // Garden: plants grown along the line (the line itself is not drawn)
       const pieces = growPlant(M.plant, M.keys, s.id, { xs, ys, nx, ny, w, L, n, w0 });
@@ -111,8 +116,6 @@ export function prepare(s) {
         for (let i = 0; i < n; i++) ws[i] = w[i] * (1.1 + 0.22 * Math.sin(L[i] / (w0 * 1.6) + p1) + 0.12 * Math.sin(L[i] / (w0 * 0.7) + p2));
         caps = capsAlong(xs, ys, ws, 0, n - 1, 2);
       }
-      // Brush ink: the solid body covers only the wet first part; bristles carry on (extraPieces)
-      if (M.extra === 'bristle') { let iw = 0; while (iw < n - 1 && L[iw] < s._len * 0.3) iw++; const tp = Math.max(4, Math.floor(iw * 0.6)); caps = capsAlong(xs, ys, w.map((v, i) => v * (i > iw - tp ? 0.3 + 0.7 * Math.max(0, (iw - i) / tp) : 1)), 0, Math.max(iw, 1), 2); }
       if (M.extra === 'vine') caps = capsAlong(xs, ys, w.map(v => v * 0.34), 0, n - 1, 2);
       const inkT = M.comic ? 0.26 * (M.inkW || 1) * w0 : (M.ink || 0) * w0;
       if (M.puffs) { caps = []; circ = cloudPuffs(s, M.puffs); }
@@ -152,20 +155,22 @@ export function prepare(s) {
       const a = p[j - 1], b = p[j], seg = (L[j] - L[j - 1]) || 1e-6, u = clamp((d - L[j - 1]) / seg, 0, 1);
       beads.push({ x: a[0] + (b[0] - a[0]) * u, y: a[1] + (b[1] - a[1]) * u, r });
     }
-    if (M.glyph || M.plant || M.space) { shapeFromBeads(s, M, beads); return; }
+    if (M.glyph || M.plant || M.space || M.micro) { shapeFromBeads(s, M, beads); return; }
     let caps = [], circ = M.geo ? beads.map((b, i) => [b.x, b.y, b.r * M.geo.bead, M.geo.sides, M.geo.spin + i * M.geo.turn]) : beads.map(b => [b.x, b.y, b.r]);
     if (M.drip) { const d = dripsFor(beads.map(b => [b.x, b.y, b.r]), mulberry32(hash32(s.id, 91))); caps = d.caps; circ = circ.concat(d.circ); }
     const bw0 = beads.reduce((a, b) => a + b.r, 0) / beads.length, inkT = M.comic ? 0.26 * (M.inkW || 1) * bw0 : (M.ink || 0) * bw0;
     s._shape = buildShape(caps, circ, M.ks, bw0, inkT);
   }
-  if (s._dot && (M.glyph || M.plant || M.space)) { shapeFromBeads(s, M, [{ x: p[0][0], y: p[0][1], r: (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz }]); return; }
+  if (s._dot && (M.glyph || M.plant || M.space || M.micro)) { shapeFromBeads(s, M, [{ x: p[0][0], y: p[0][1], r: (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz }]); return; }
   if (s._dot) { const rr = (s.tool === 'beads' ? BEAD_R * 2.2 : NEON_W * 1.4) * sz; s._shape = buildShape([], [M.geo ? [p[0][0], p[0][1], rr * M.geo.bead, M.geo.sides, M.geo.spin] : [p[0][0], p[0][1], rr]], M.ks, rr, M.comic ? 0.26 * rr : (M.ink || 0) * rr); }
+  if (s._dot && M.extra === 'bristle') s._shape.paths.br = s._shape.paths[1];   // a dab of the brush
 }
 // Code cells or garden blooms at points (Beads, and single dots)
 function shapeFromBeads(s, M, beads) {
   const bw0 = beads.reduce((a, b) => a + b.r, 0) / beads.length;
   if (M.glyph) { s._shape = glyphShape(glyphCells(beads.map(b => [b.x, b.y, b.r]), s.id), bw0); return; }
   if (M.space) { s._shape = spaceShape(M, s.id, null, beads); return; }
+  if (M.micro) { const pieces = growMicro(M.micro, M.keys, s.id, null, beads); s._shape = { paths: { ...pieces, 1: pieces.all }, w0: bw0, wd: bw0, ink: null, noHide: true }; return; }
   // Dense blooms are thinned (every 2nd or 3rd bead) so a line of them stays quick to draw in every copy
   const every = M.beadEvery || 1, pieces = growPlant(M.plant, M.keys, s.id, null, every > 1 && beads.length > 2 ? beads.filter((b, i) => i % every === 0) : beads);
   s._shape = { paths: { ...pieces, 1: pieces.all }, w0: bw0, wd: bw0, ink: null };

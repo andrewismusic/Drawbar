@@ -35,6 +35,11 @@ export function setVisual(on) {
   else if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
   requestAnimationFrame(layout);
 }
+export function openStyles(open) { $('worldTabs').hidden = !open; $('styleBtn').setAttribute('aria-expanded', String(open)); }
+export function openSound(open) {
+  $('knobRow').hidden = !open; $('soundBtn').setAttribute('aria-pressed', String(open)); $('soundBtn').setAttribute('aria-expanded', String(open));
+  if (open) for (const key in mixKnobs) mixKnobs[key].draw();
+}
 export function syncSound() {
   const on = playing && !paused;
   $('playBtn').classList.toggle('paused', !on);
@@ -48,8 +53,7 @@ export function syncUI() {
   for (const x of WORLDS) { const b = $('world-' + x.id); b.setAttribute('aria-selected', String(x === w)); b.tabIndex = x === w ? 0 : -1; b.hidden = !!x.legacy && x !== w; }
   $('fxGroup').hidden = !(w.options && w.options.fx);
   for (const b of $('fxSeg').children) b.setAttribute('aria-pressed', String(b.dataset.v === score.fx));
-  const strip = $('worldTabs'), sel = $('world-' + w.id);
-  if (sel.offsetLeft < strip.scrollLeft || sel.offsetLeft + sel.offsetWidth > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = sel.offsetLeft - 8;
+  $('styleName').textContent = w.name;
   for (const md of MODES) $('mode-' + md.id).hidden = !w.modes.includes(md.id);
   for (const t of TOOLS) $('tool-' + t.id).hidden = !w.tools.includes(t.id);
   $('tools').classList.toggle('many', w.tools.length > 5);
@@ -81,7 +85,6 @@ export function syncUI() {
   // Brushes show in the tab's own order (w.mats), whatever their place in MATS
   MATS.forEach((M, i) => { const b = $('sw-' + i); b.setAttribute('aria-pressed', String(ui.color === i)); if (!b.hidden) { b.style.order = w.matIdx.indexOf(i); b.style.setProperty('--c', w.colors && M.swatchFor ? M.swatchFor(ui.tint) : M.swatch); b.title = M.label && w.colors ? M.label : M.name; b.setAttribute('aria-label', b.title); } });
   document.documentElement.style.setProperty('--ink', ink());
-  $('sizeLabel').textContent = ui.tool === 'erase' ? 'Eraser size' : TOOL[ui.tool].stamp ? 'Stamp size' : 'Brush size';
   if (!anim) mapInput.value = String(score.map).padStart(3, '0');
   $('bpmVal').textContent = score.tempo;
   $('undoBtn').disabled = !undoStack.length;
@@ -96,8 +99,17 @@ export function initControls() {
   WORLDS.forEach(w => {
     const b = document.createElement('button');
     b.id = 'world-' + w.id; b.setAttribute('role', 'tab'); b.textContent = w.name;
-    b.addEventListener('click', () => switchWorld(w.id));
+    b.addEventListener('click', () => { openStyles(false); switchWorld(w.id); });
     $('worldTabs').appendChild(b);
+  });
+  // The style picker: one button showing the current style; tap for the list
+  $('styleBtn').addEventListener('click', () => openStyles($('worldTabs').hidden));
+  // Sound controls: put away until asked for; they open as a sheet and stay while you draw
+  $('soundBtn').addEventListener('click', () => openSound($('knobRow').hidden));
+  $('soundClose').addEventListener('click', () => openSound(false));
+  document.addEventListener('pointerdown', e => {
+    if (!$('worldTabs').hidden && !e.target.closest('.stylewrap')) openStyles(false);
+    if (!$('knobRow').hidden && !e.target.closest('#knobRow, #soundBtn, #stage, .top')) openSound(false);
   });
   $('worldTabs').addEventListener('keydown', e => {
     const d = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
@@ -178,7 +190,7 @@ export function initControls() {
   for (const b of document.querySelectorAll('.cogbtn')) b.addEventListener('click', () => openSettings(settings.hidden));
   $('closeSettings').addEventListener('click', () => openSettings(false));
   document.addEventListener('pointerdown', e => { if (!settings.hidden && !settings.contains(e.target) && !e.target.closest('.cogbtn')) openSettings(false); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { openSettings(false); $('exportDlg').hidden = true; setVisual(false); } });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { openSettings(false); openStyles(false); openSound(false); $('exportDlg').hidden = true; setVisual(false); } });
   for (const [id, k] of [['prTempo', 'rTempo'], ['prMode', 'rMode'], ['prFolds', 'rFolds']]) {
     $(id).checked = !!prefs[k];
     $(id).addEventListener('change', e => { prefs[k] = e.target.checked; savePrefs(); });
