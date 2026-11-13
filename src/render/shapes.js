@@ -92,6 +92,28 @@ export function extraPieces(s, kind, xs, ys, nx, ny, w, L, n, w0) {
       out.bubHi.moveTo(hx + hr, hy); out.bubHi.arc(hx, hy, hr, 0, TAU);
     }
   }
+  if (kind === 'bristle') {
+    // Brush ink: a bundle of bristles across the line's width. Each runs out of ink at its own point and skips more
+    // and more toward the end (a dry brush). Thin segments, all wound the same way.
+    const B = out.br = new Path2D(), nb = 13, len = L[n - 1] || 1e-6, step = Math.max(1, Math.floor(n / 70));
+    for (let b = 0; b < nb; b++) {
+      const lat = (b / (nb - 1)) * 2 - 1, dry = 0.35 + 0.65 * rnd(), hw = w0 * (0.06 + 0.06 * rnd()), ph = rnd() * 40, runs = 0.5 + rnd() * 0.5;
+      let a = 0, on = true;
+      for (let i = step; a < n - 1; i += step) {
+        const e = Math.min(i, n - 1), u = L[e] / len;
+        // Ink left along the line: full at the start, thinning past each bristle's own point; gaps come in runs
+        const ink = 1.25 - Math.pow(u / runs, 2.2) * dry, gap = 0.5 + 0.5 * Math.sin(u * len / w0 * 0.9 + ph) * Math.sin(u * len / w0 * 0.37 + ph * 1.7);
+        on = ink > gap * 1.05;
+        if (on) {
+          const ax = xs[a] + nx[a] * lat * w[a] * 0.92, ay = ys[a] + ny[a] * lat * w[a] * 0.92, bx = xs[e] + nx[e] * lat * w[e] * 0.92, by = ys[e] + ny[e] * lat * w[e] * 0.92;
+          const dx = bx - ax, dy = by - ay, dl = Math.hypot(dx, dy) || 1e-6, px = -dy / dl * hw, py = dx / dl * hw;
+          B.moveTo(ax - px, ay - py); B.lineTo(bx - px, by - py); B.lineTo(bx + px, by + py); B.lineTo(ax + px, ay + py); B.closePath();
+          B.moveTo(bx + hw, by); B.arc(bx, by, hw, 0, TAU);
+        }
+        a = e;
+      }
+    }
+  }
   if (kind === 'vine') {
     // Leaves on alternating sides, leaning forward; flowers clustered along the stem
     const leaf = out.leaf = new Path2D(), leafHi = out.leafHi = new Path2D();

@@ -1,4 +1,5 @@
 // Hidden layer: the arranger turns strokes into lanes of note events, drums (Euclidean), loops, drones and modulation slots
+import { toneIdx } from '../styles/index.js';
 import { COPIES, cycleBars, cycleBeats, fs, kCopies, mirrored, patternAmount, rawH, sPhase, strokePhase, tileGeo } from '../canvas/index.js';
 import { TAU, clamp, hashFrac, mod, th } from '../core/math.js';
 import { score } from '../core/state.js';
@@ -59,7 +60,7 @@ export function arrange() {
     let hs = 0, c = 0;
     for (let i = 0; i < s.pts.length; i += 3) { hs += relH(rawH(s.pts[i][0], s.pts[i][1])); c++; }
     s._hm = hs / Math.max(c, 1);
-    const hue = TAU * s.color / HUE_STEPS;
+    const hue = TAU * toneIdx(s) / HUE_STEPS;
     s._f = [s._hm, s._len / maxLen, Math.min(s._avgSp / 3, 1), Math.min(s._curv / 25, 1), Math.cos(hue), Math.sin(hue), Math.min(s._sz / 12, 1), s.tool === 'glow' ? 1 : 0, s.tool === 'beads' ? 1 : 0];
   }
   let len = 0, hsum = 0, h2 = 0, anim = 0, cc = 0, cs = 0, spd = 0;

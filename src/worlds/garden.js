@@ -3,7 +3,7 @@
 // Later genres: to be decided (soundscape, impressionist, lofi).
 export default {
   id: 'garden', name: 'Garden',
-  mats: ['Glowcaps', 'Bellcaps', 'Trumpets', 'Puffballs', 'Coral', 'Spirals', 'Starbloom', 'Moonberries', 'Lanterns'],
+  mats: ['Glowcaps', 'Bellcaps', 'Trumpets', 'Puffballs', 'Spirals', 'Starbloom', 'Moonberries', 'Lanterns'],
   tools: ['glow', 'erase'],
   modes: ['free', 'kaleido', 'tiles'],
   limits: { copies: 6, tiles: 4, turns: 3, rotate: true },   // no 6-turn hex tiling: ~300 ms to redraw with the film grain

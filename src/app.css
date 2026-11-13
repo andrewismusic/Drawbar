@@ -156,7 +156,7 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 @media (max-width:440px){ .kn.big{width:46px; height:46px} .kn.big .kv{font-size:13px} .knobs.sound{gap:6px; padding:5px 8px 4px 8px} .kwrap.big{width:64px} }
 
 /* Panel */
-.group{display:flex; flex-direction:column; gap:8px; min-width:0}
+.group{display:flex; flex-direction:column; gap:8px; min-width:0; max-width:100%}
 .group h2{margin:0; font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); display:none}
 .group h2 .mname{color:var(--fg); letter-spacing:.04em; text-transform:none; font-size:12px; margin-left:6px}
 .row{display:flex; gap:10px; align-items:center}
@@ -167,8 +167,8 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .seg.fx{align-self:flex-start}
 .seg.fx button{min-height:32px; padding:0 9px; font-size:13px}
 /* Tools: a row of up to six (Geometric has five shapes and the eraser) */
-.tools{display:flex; gap:6px}
-.tools .tool{flex:0 0 52px; min-width:0}
+.tools{display:flex; gap:6px; max-width:100%}
+.tools .tool{flex:0 1 auto; width:52px; min-width:0}
 .tool span{max-width:100%; white-space:nowrap; font-size:10px; letter-spacing:-.01em}
 /* Six tools (Geometric's shapes): slightly smaller labels so all six fit */
 .tools.many .tool span{font-size:9px}
@@ -229,3 +229,23 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .dialog .go{background:var(--fg); color:var(--bg); border-color:var(--fg)}
 .toast{position:fixed; left:50%; bottom:calc(16px + env(safe-area-inset-bottom, 0px)); transform:translateX(-50%); z-index:60; background:var(--fg); color:var(--bg); padding:10px 16px; border-radius:10px; font-weight:600; max-width:calc(100vw - 48px)}
 @media (prefers-reduced-motion: reduce){ #dice.roll svg{animation:none} .switch span::after{transition:none} .recpill .dot{animation:none} }
+
+/* Narrow phones (and the app's own frame around the page): everything shrinks to fit, nothing leaves the screen */
+@media (max-width:372px){
+  body{padding-left:max(10px, env(safe-area-inset-left, 0px)); padding-right:max(10px, env(safe-area-inset-right, 0px))}
+  .top{gap:6px 4px} .top .lab{display:none}
+  .cluster{gap:4px; flex-wrap:nowrap}
+  .top .icon{width:34px; min-height:36px} .top .icon svg{width:18px; height:18px}
+  #mapInput, .bpm{height:36px} #mapInput{font-size:19px} .bpm{width:68px}
+  .seg.mini button{width:32px; min-height:28px}
+  .knobs.sound{gap:2px; padding:4px 6px 3px 6px}
+  .kwrap.big{width:56px}
+  .knobs .slab{font-size:9px}
+  .prow{gap:3px} .prow .kwrap{width:40px}
+  .icon.round{width:40px; height:40px; min-height:40px}
+  .tools{gap:4px}
+  .tools.many .tool span{display:none}
+  .tools.many .tool{height:46px}
+}
+/* Colour picker: a faint ring, so black shows on the dark panel */
+#colors .sw::after{box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}

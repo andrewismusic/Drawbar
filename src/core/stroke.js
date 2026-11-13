@@ -111,6 +111,8 @@ export function prepare(s) {
         for (let i = 0; i < n; i++) ws[i] = w[i] * (1.1 + 0.22 * Math.sin(L[i] / (w0 * 1.6) + p1) + 0.12 * Math.sin(L[i] / (w0 * 0.7) + p2));
         caps = capsAlong(xs, ys, ws, 0, n - 1, 2);
       }
+      // Brush ink: the solid body covers only the wet first part; bristles carry on (extraPieces)
+      if (M.extra === 'bristle') { let iw = 0; while (iw < n - 1 && L[iw] < s._len * 0.3) iw++; const tp = Math.max(4, Math.floor(iw * 0.6)); caps = capsAlong(xs, ys, w.map((v, i) => v * (i > iw - tp ? 0.3 + 0.7 * Math.max(0, (iw - i) / tp) : 1)), 0, Math.max(iw, 1), 2); }
       if (M.extra === 'vine') caps = capsAlong(xs, ys, w.map(v => v * 0.34), 0, n - 1, 2);
       const inkT = M.comic ? 0.26 * (M.inkW || 1) * w0 : (M.ink || 0) * w0;
       if (M.puffs) { caps = []; circ = cloudPuffs(s, M.puffs); }
@@ -130,6 +132,7 @@ export function prepare(s) {
       s._shape = buildShape(caps, circ, M.ks, w0 * 0.9, inkT, inkCaps);
       if (M.extra) Object.assign(s._shape.paths, extraPieces(s, M.extra, xs, ys, nx, ny, w, L, n, w0));
       if (M.puffs) s._shape.w0 = w0 * 0.75;
+      if (M.extra === 'bristle') s._shape.noHide = true;   // a dry brush covers nothing fully
     }
   } else {
     // Space beads along the line, then stretch the spacing so the last bead lands on the end

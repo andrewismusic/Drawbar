@@ -31,7 +31,7 @@ export function glyphCells(samples, id, headFrom = Infinity) {
       const key = i + ',' + j, head = k >= headFrom;
       const prev = cells.get(key);
       if (prev) { if (head) prev[4] = 1; continue; }
-      const h = hash32(id, i, j);
+      const h = hash32(i, j, 9173);   // the cell alone picks its character (v25), so strokes painted over each other agree
       cells.set(key, [i * g, j * g, h % n, (h >>> 8) % 10 < 5 ? 0 : (h >>> 8) % 10 < 8 ? 1 : 2, head ? 1 : 0]);
     }
   });

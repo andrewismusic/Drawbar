@@ -49,7 +49,7 @@ export function initSizeBar() {
       e.preventDefault();
       try { el.setPointerCapture(e.pointerId); } catch (err) {}
       const now = performance.now();
-      if (now - lastTap < 320) { setV(ui.tool === 'erase' ? 45 : 26); lastTap = 0; drag = null; return; }
+      if (now - lastTap < 320) { setV(ui.tool === 'erase' ? 45 : 42); lastTap = 0; drag = null; return; }
       lastTap = now; drag = e.pointerId; setFrom(e.clientX);
     });
     el.addEventListener('pointermove', e => { if (drag === e.pointerId) setFrom(e.clientX); });

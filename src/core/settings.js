@@ -8,7 +8,7 @@ import { SET_KEYS, checkpoint, mix, prefs, redoStack, savePrefs, score, seeId, s
 import { prepare } from './stroke.js';
 import { setBpm } from './transport.js';
 import { mapInput, syncUI } from './ui.js';
-import { appendStroke, checkHiddenSoon, ensureCanvases, fb, markGroupsDirty, refreshHidden, releaseCanvases } from '../render/compose.js';
+import { appendStroke, checkHiddenSoon, ensureCanvases, fb, markGroupsDirty, refreshHidden, releaseCanvases, syncDraw } from '../render/compose.js';
 import { ARR, rearrange } from '../sound/arranger.js';
 import { applyAudio, applyTempoParams } from '../sound/graph.js';
 import { MAP, applyKeyScale, useMap } from '../sound/maps.js';
@@ -17,8 +17,8 @@ import { matIndex } from '../styles/index.js';
 import { WORLD, world } from '../worlds/index.js';
 import { layout } from './layout.js';
 
-// lazy: leave the hidden-stroke test for a moment later (it runs a few ms per frame), used while erasing
-export function rebuild(tc, lazy) { if (fb.width > 8) { ensureCanvases(); if (lazy) checkHiddenSoon(); else refreshHidden(); } rearrange(); markGroupsDirty(); applyAudio(tc); }
+// The hidden-stroke test starts on the next frame and runs a few ms per frame (lazy: a moment later, used while erasing)
+export function rebuild(tc, lazy) { if (fb.width > 8) { ensureCanvases(); if (syncDraw) refreshHidden(); else checkHiddenSoon(lazy ? 250 : 0); } rearrange(); markGroupsDirty(); applyAudio(tc); }
 // A stroke was just added on top: draw only that stroke, re-arrange the music, and test for hidden strokes a moment later
 export function strokeAdded(s) { ensureCanvases(); appendStroke(s); checkHiddenSoon(); rearrange(); applyAudio(); }
 // The hidden-stroke test found a change: hidden strokes are silent, so re-arrange

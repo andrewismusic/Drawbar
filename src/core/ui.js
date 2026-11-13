@@ -78,7 +78,8 @@ export function syncUI() {
     }
     for (const b of cg.children) b.setAttribute('aria-pressed', String(b.dataset.c === ui.tint));
   }
-  MATS.forEach((M, i) => { const b = $('sw-' + i); b.setAttribute('aria-pressed', String(ui.color === i)); if (!b.hidden) { b.style.setProperty('--c', w.colors && M.swatchFor ? M.swatchFor(ui.tint) : M.swatch); b.title = M.label && w.colors ? M.label : M.name; b.setAttribute('aria-label', b.title); } });
+  // Brushes show in the tab's own order (w.mats), whatever their place in MATS
+  MATS.forEach((M, i) => { const b = $('sw-' + i); b.setAttribute('aria-pressed', String(ui.color === i)); if (!b.hidden) { b.style.order = w.matIdx.indexOf(i); b.style.setProperty('--c', w.colors && M.swatchFor ? M.swatchFor(ui.tint) : M.swatch); b.title = M.label && w.colors ? M.label : M.name; b.setAttribute('aria-label', b.title); } });
   document.documentElement.style.setProperty('--ink', ink());
   $('sizeLabel').textContent = ui.tool === 'erase' ? 'Eraser size' : TOOL[ui.tool].stamp ? 'Stamp size' : 'Brush size';
   if (!anim) mapInput.value = String(score.map).padStart(3, '0');

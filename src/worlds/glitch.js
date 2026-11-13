@@ -6,13 +6,13 @@
 // Later genres: IDM, experimental, trap.
 export default {
   id: 'glitch', name: 'Glitch',
-  mats: ['Tetra', 'Cube', 'Octa', 'Icosa', 'Dodeca', 'Nodes', 'Matrix'],   // Matrix is the Code brush
+  mats: ['Solids', 'Nodes', 'Matrix', 'Scope', 'Bars', 'Scanlines', 'Point cloud', 'Terrain', 'Pixel sort', 'Datamosh'],   // Matrix is the Code brush
   colors: ['#ff2e97', '#4d8bff', '#b6ff1a', '#ff8a2a', '#eef2ff', '#3dff7a', '#ffb000', '#35e6ff', '#ff4258'],
   tools: ['glow', 'loop', 'ripple', 'erase'],
   modes: ['free', 'tiles'],
   // Tiles: up to 3 across and no turns. Every stroke is redrawn every frame in every copy, so copies are kept few.
   limits: { copies: 0, tiles: 3, turns: 0, rotate: false },
-  start: { mode: 'free', copies: 2, spiral: 0, tiles: 3, turns: 0, mirror: false, fscale: 50, frot: false, fmirror: false, fx: 'smear', tool: 'glow', color: 'Cube' },
+  start: { mode: 'free', copies: 2, spiral: 0, tiles: 3, turns: 0, mirror: false, fscale: 50, frot: false, fmirror: false, fx: 'smear', tool: 'glow', color: 'Solids' },
   options: { fx: true },
   render: { grid: true },
 };

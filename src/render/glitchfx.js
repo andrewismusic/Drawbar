@@ -12,7 +12,8 @@
 // stroke pulses with its own notes (pulseFrame), and drum hits nudge them all. Visual only.
 import { TAU, hash32, mulberry32, mod, clamp } from '../core/math.js';
 import { score } from '../core/state.js';
-import { NEON_W } from '../core/stroke.js';
+import { NEON_W, speedN } from '../core/stroke.js';
+import { buildShape, capsAlong } from './shapes.js';
 import { forCopies } from '../canvas/index.js';
 import { MATS, colorOf } from '../styles/index.js';
 import { GCELL, glyphCells, lineSamples, sheet, SZ, COLS, NGLYPH, LEVELS } from './glyphs.js';
@@ -43,13 +44,22 @@ const SOLIDS = {
 function setup(s) {
   const M = MATS[s.color], r = mulberry32(hash32(s.id, 911)), n = s.pts.length, L = s._L;
   const g = { fx: s.fx === 'blocks' || s.fx === 'jitter' ? s.fx : 'smear', dir: r() < 0.5 ? -1 : 1, reach: 0.5 + r(), split: 0.5 + r(), rate: 0.5 + 1.5 * r(), hold: 2 + Math.floor(r() * 5), amt: 0.5 + r(), seed: hash32(s.id, 77) };
+  g.base = NEON_W * s._sz * 2.8;
+  if (M.gl === 'cloud') {
+    // Point cloud: points that circle the line at their own radius and pace (so they read as depth)
+    const N = Math.round(clamp(s._len / (g.base * 0.1), 14, 150));
+    g.pc = [];
+    for (let k = 0; k < N; k++) g.pc.push({ i: Math.floor(r() * n), rad: (0.25 + 1.9 * r() * r()), th: r() * TAU, sp: (r() < 0.5 ? -1 : 1) * (0.4 + 1.8 * r()), sz: 0.6 + 0.9 * r() });
+  }
   if (M.wire || M.nodes) {
     const base = NEON_W * s._sz * (s.tool === 'beads' ? 1.6 : 2.8) * (M.nodes ? 0.5 : 1), gap = Math.max(base * 2.3, s._len / (M.nodes ? 16 : 9));   // at most about 9 solids (16 nodes) a stroke
     g.els = []; g.lw = clamp(base * 0.085, 0.0022, 0.006);
     let next = 0;
     for (let i = 0; i < n; i++) {
       if (L[i] < next && !(i === n - 1 && !g.els.length)) continue;
-      g.els.push({ i, x: s._xs[i], y: s._ys[i], R: base * (0.7 + 0.6 * r()), a: [r() * TAU, r() * TAU], w: [(r() - 0.5) * 2.6, (r() - 0.5) * 2.6], t: s.pts[i][2] });
+      // Solids: the faster the hand was moving here, the more faces (4, 6, 8, 12, 20)
+      const v = speedN(s._sp[i]), kind = M.wire === 'auto' ? (v < 0.12 ? 'tetra' : v < 0.26 ? 'cube' : v < 0.45 ? 'octa' : v < 0.7 ? 'dodeca' : 'icosa') : M.wire;
+      g.els.push({ i, kind, x: s._xs[i], y: s._ys[i], R: base * (0.7 + 0.6 * r()), a: [r() * TAU, r() * TAU], w: [(r() - 0.5) * 2.6, (r() - 0.5) * 2.6], t: s.pts[i][2] });
       next = L[i] + gap;
     }
   }
@@ -70,9 +80,10 @@ function sway(s, i, S) {
 }
 // This frame's wireframes as one path
 function wirePath(s, g, S, T, slot, e) {
-  const P = new Path2D(), { V, E } = SOLIDS[MATS[s.color].wire], pts = new Array(V.length);
+  const P = new Path2D(), pts = [];
   for (const el of g.els) {
     if (el.t > T) continue;
+    const { V, E } = SOLIDS[el.kind];
     const off = sway(s, el.i, S);
     let x = el.x + s._nx[el.i] * off, y = el.y + s._ny[el.i] * off, R = el.R * (1 + 0.25 * e);
     if (g.fx === 'jitter') {
@@ -126,8 +137,8 @@ function drawCells(X, cells, g, color, S, slot, e, dx, dy, alpha) {
   const sh = sheet(color), head = sheet('#f2fff6'), G = GCELL;
   for (const [x0, y0, gi, lv, hd] of cells) {
     // Characters are replaced over time: some cells never change, some tick slowly, some flicker
-    const h = hash32(Math.round(x0 * 1000), Math.round(y0 * 1000), g.seed), pace = h % 10, rate = pace < 3 ? 0 : pace < 8 ? 0.6 + frac(h >>> 5) * 2.4 : 6 + frac(h >>> 5) * 9;
-    const ch = (gi + Math.floor(S * rate * g.rate + (h >>> 12) % 7)) % NGLYPH;
+    const h = hash32(Math.round(x0 * 1000), Math.round(y0 * 1000), 5150), pace = h % 10, rate = pace < 3 ? 0 : pace < 8 ? 0.6 + frac(h >>> 5) * 2.4 : 6 + frac(h >>> 5) * 9;
+    const ch = (gi + Math.floor(S * rate + (h >>> 12) % 7)) % NGLYPH;
     let x = x0 + dx, y = y0 + dy, k = G;
     if (g.fx === 'jitter') {
       const j = hash32(h, Math.floor(slot / (1 + pace % 4))), big = j % 7 === 0, a = g.amt * (1 + e);
@@ -138,18 +149,181 @@ function drawCells(X, cells, g, color, S, slot, e, dx, dy, alpha) {
     X.drawImage(hd ? head : sh, (ch % COLS) * SZ, Math.floor(ch / COLS) * SZ, SZ, SZ, x, y, k, k);
   }
 }
+// ----- Line brushes (v25): Scope, Bars, Scanlines, Point cloud, Terrain. Each builds this frame's paths from the
+// stroke's points after sway (Ripple), reveal (Loop) and jitter; smear and blocks then work on them like any other.
+// This frame's points; returns how many are showing
+function livePts(s, g, S, T, slot, e) {
+  const n = s.pts.length, px = g.px || (g.px = new Float32Array(n)), py = g.py || (g.py = new Float32Array(n));
+  let m = n;
+  if (T !== Infinity) { m = 0; while (m < n && s.pts[m][2] <= T) m++; }
+  const chunk = Math.max(4, Math.ceil(n / 7));
+  for (let i = 0; i < m; i++) {
+    const off = sway(s, i, S);
+    px[i] = s._xs[i] + s._nx[i] * off; py[i] = s._ys[i] + s._ny[i] * off;
+    if (g.fx === 'jitter') {
+      const q = Math.floor(i / chunk), h = hash32(g.seed, q, Math.floor(slot / (1 + (q + g.hold) % 4))), big = h % 6 === 0, k = g.amt * (1 + e) * g.base;
+      px[i] += (frac(h) - 0.5) * (big ? 4 : 0.9) * k; py[i] += (frac(h >>> 8) - 0.5) * (big ? 3 : 0.7) * k;
+    }
+  }
+  return m;
+}
+const LIVE = {
+  // Oscilloscope: the line carries a travelling wave, taller on its notes; small ticks mark the scale
+  scope(s, g, S, m, e) {
+    const P = new Path2D(), px = g.px, py = g.py, L = s._L, w = s._w, lam = g.base * 1.1, k = 0.7 + 1.3 * Math.min(e, 1.2);
+    for (let i = 0; i < m; i++) {
+      const u = L[i], a = w[i] * 2.2 * k * (Math.sin(u / lam - S * 5 * g.rate + g.seed % 9) * 0.6 + Math.sin(u / (lam * 0.37) + S * 3.1) * 0.28 + Math.sin(u / (lam * 0.13) - S * 11) * 0.12 * (0.3 + e));
+      const x = px[i] + s._nx[i] * a, y = py[i] + s._ny[i] * a;
+      if (i) P.lineTo(x, y); else P.moveTo(x, y);
+    }
+    for (let i = 0; i < m; i += 12) { const t = w[i] * 0.35, o = w[i] * 2.3; for (const sd of [-1, 1]) { P.moveTo(px[i] + s._nx[i] * (o - t) * sd, py[i] + s._ny[i] * (o - t) * sd); P.lineTo(px[i] + s._nx[i] * (o + t) * sd, py[i] + s._ny[i] * (o + t) * sd); } }
+    return { line: P };
+  },
+  // Level bars standing across the line, each bouncing at its own pace and jumping on the stroke's notes
+  bars(s, g, S, m, e) {
+    const P = new Path2D(), px = g.px, py = g.py, L = s._L, w = s._w, gap = Math.max(g.base * 0.55, s._len / 60);
+    let next = 0, k = 0;
+    for (let i = 0; i < m; i++) {
+      if (L[i] < next) continue;
+      next = L[i] + gap; k++;
+      const h = hash32(g.seed, k), lv = 0.25 + 0.75 * Math.abs(Math.sin(S * (1.5 + 3 * frac(h)) * g.rate + frac(h >>> 9) * TAU)), hgt = w[i] * 2.4 * Math.min(1.5, lv * (0.55 + 0.9 * e)) + g.base * 0.08;
+      const tx = -s._ny[i] * gap * 0.33, ty = s._nx[i] * gap * 0.33, nx = s._nx[i] * hgt, ny = s._ny[i] * hgt;
+      P.moveTo(px[i] - tx - nx, py[i] - ty - ny); P.lineTo(px[i] + tx - nx, py[i] + ty - ny); P.lineTo(px[i] + tx + nx, py[i] + ty + ny); P.lineTo(px[i] - tx + nx, py[i] - ty + ny); P.closePath();
+    }
+    return { fill: P };
+  },
+  // The mark as level screen lines; now and then a line tears sideways, and a thicker band rolls down through it
+  scan(s, g, S, m, e, slot) {
+    const P = new Path2D(), px = g.px, py = g.py, w = s._w, rs = clamp(g.base * 0.17, 0.008, 0.022), rows = new Map();
+    for (let i = 0; i < m; i += 2) {
+      const r = w[i] * 1.25, y = py[i];
+      for (let k = Math.ceil((y - r) / rs); k * rs <= y + r; k++) {
+        const dy = k * rs - y, hw = Math.sqrt(Math.max(0, r * r - dy * dy));
+        if (hw < rs * 0.2) continue;
+        let row = rows.get(k); if (!row) rows.set(k, row = []);
+        row.push(px[i] - hw, px[i] + hw);
+      }
+    }
+    const b = s._bb, band = b[1] + mod(S * 0.12 * g.rate + frac(g.seed), 1) * (b[3] - b[1]);
+    for (const [k, row] of rows) {
+      const h = hash32(g.seed, k, Math.floor(slot / (g.hold + 1))), tear = h % 9 === 0 ? (frac(h >>> 4) - 0.5) * g.base * 3 * g.reach * (1 + e) : 0;
+      const y = k * rs, th = rs * (Math.abs(y - band) < rs * 2.2 ? 0.85 : 0.42);
+      // Join the spans on this line, left to right
+      const iv = []; for (let q = 0; q < row.length; q += 2) iv.push([row[q], row[q + 1]]);
+      iv.sort((a, c) => a[0] - c[0]);
+      let [x0, x1] = iv[0];
+      for (let q = 1; q <= iv.length; q++) {
+        if (q < iv.length && iv[q][0] <= x1) { x1 = Math.max(x1, iv[q][1]); continue; }
+        P.rect(x0 + tear, y - th / 2, x1 - x0, th);
+        if (q < iv.length) [x0, x1] = iv[q];
+      }
+    }
+    return { fill: P };
+  },
+  // Points circling the line: near ones big and bright, far ones small and dim
+  cloud(s, g, S, m, e) {
+    const near = new Path2D(), far = new Path2D(), px = g.px, py = g.py, w = s._w, d0 = g.base * 0.1;
+    for (const q of g.pc) {
+      if (q.i >= m) continue;
+      const a = q.th + q.sp * S * g.rate, lat = q.rad * w[q.i] * Math.cos(a) * (1 + 0.6 * e), dep = Math.sin(a), d = d0 * q.sz * (1 + 0.45 * dep) * (1 + 0.5 * e);
+      const x = px[q.i] + s._nx[q.i] * lat, y = py[q.i] + s._ny[q.i] * lat;
+      (dep > -0.2 ? near : far).rect(x - d / 2, y - d / 2, d, d);
+    }
+    return { fill: near, far };
+  },
+  // A strip of wireframe ground along the line, its hills rolling past
+  terrain(s, g, S, m, e) {
+    const P = new Path2D(), px = g.px, py = g.py, L = s._L, w = s._w, lam = g.base * 1.6, K = 5, step = 3, amp = 0.9 + 0.9 * Math.min(e, 1.2);
+    const at = (i, v) => {
+      const u = L[i], h = 0.55 * Math.sin(u / lam - S * 1.3 * g.rate + v * 1.7 + g.seed % 5) + 0.45 * Math.sin(u / (lam * 0.41) + S * 0.8 - v * 2.9);
+      return [px[i] + s._nx[i] * v * w[i] * 1.5, py[i] + s._ny[i] * v * w[i] * 1.5 - h * w[i] * 0.75 * amp];
+    };
+    const last = m - 1;
+    for (let k = 0; k < K; k++) {
+      const v = k / (K - 1) * 2 - 1;
+      for (let i = 0; ; i += step) { const j = Math.min(i, last), q = at(j, v); if (i) P.lineTo(q[0], q[1]); else P.moveTo(q[0], q[1]); if (j === last) break; }
+    }
+    for (let i = 0; ; i += step * 2) { const j = Math.min(i, last); for (let k = 0; k < K; k++) { const q = at(j, k / (K - 1) * 2 - 1); if (k) P.lineTo(q[0], q[1]); else P.moveTo(q[0], q[1]); } if (j === last) break; }
+    return { line: P };
+  },
+};
+// ----- Sort and Mosh (v25): brushes that work on whatever is already painted beneath them. A live stroke is drawn in
+// its turn, so the picture so far is there to read: the patch under the stroke is copied once to a spare canvas, then
+// drawn back in pieces, clipped to the stroke. Nothing beneath: only the stroke's own faint trace shows.
+const spare = document.createElement('canvas'), spx = spare.getContext('2d');
+function drawUnder(X, s, g, S, T, slot, e, c) {
+  const M = MATS[s.color], n = s.pts.length;
+  let body = s._shape && s.tool === 'glow' ? s._shape.paths[1] : null;
+  if (!body) {
+    let m = n - 1;
+    if (T !== Infinity) { m = 0; while (m < n - 1 && s.pts[m + 1][2] <= T) m++; if (m < 1) return; }
+    let xs = s._xs, ys = s._ys;
+    if (s.tool === 'ripple') { for (let i = 0; i < n; i++) { const off = sway(s, i, S); s._rx[i] = s._xs[i] + s._nx[i] * off; s._ry[i] = s._ys[i] + s._ny[i] * off; } xs = s._rx; ys = s._ry; }
+    body = buildShape(capsAlong(xs, ys, s._w, 0, m, 3), [], [1], g.base, 0).paths[1];
+  }
+  const cvs = X.canvas, b = s._bb;
+  forCopies(X, () => {
+    // The stroke's own trace, so it is never invisible
+    X.globalAlpha = 0.13 + 0.1 * Math.min(e, 1); X.fillStyle = c; X.fill(body);
+    if (s.tool === 'glow') { X.globalAlpha = 0.6; X.strokeStyle = c; X.lineWidth = clamp(g.base * 0.05, 0.002, 0.004); X.stroke(s._path); }
+    X.globalAlpha = 1;
+    // Where this copy lands on the canvas, in pixels
+    const t = X.getTransform(), cx = [b[0], b[2], b[0], b[2]], cy = [b[1], b[1], b[3], b[3]];
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (let k = 0; k < 4; k++) { const x = t.a * cx[k] + t.c * cy[k] + t.e, y = t.b * cx[k] + t.d * cy[k] + t.f; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    x0 = Math.max(0, Math.floor(x0)); y0 = Math.max(0, Math.floor(y0)); x1 = Math.min(cvs.width, Math.ceil(x1)); y1 = Math.min(cvs.height, Math.ceil(y1));
+    const w = x1 - x0, h = y1 - y0, unit = Math.max(3, g.base * Math.sqrt(Math.abs(t.a * t.d - t.b * t.c)));
+    if (w < 4 || h < 4) return;
+    if (spare.width < w || spare.height < h) { spare.width = Math.max(spare.width, w); spare.height = Math.max(spare.height, h); }
+    spx.clearRect(0, 0, w, h); spx.drawImage(cvs, x0, y0, w, h, 0, 0, w, h);
+    X.save(); X.clip(body); X.setTransform(1, 0, 0, 1, 0, 0);
+    if (M.under === 'sort') {
+      // Pixel sort: in most columns, one row of the picture is dragged out into a long streak
+      const cw = Math.max(2, Math.round(Math.max(unit * 0.22, w / 90)));
+      for (let j = 0, x = 0; x < w; j++, x += cw) {
+        const q = hash32(g.seed, j, Math.floor(slot / (g.hold + j % 3 + 2)));
+        if (q % 4 === 0) continue;
+        const ys = Math.floor(frac(q) * h * 0.85), ln = Math.min(h, Math.round(h * (0.12 + 0.5 * frac(q >>> 8)) * (0.7 + 0.8 * e) * g.reach));
+        X.drawImage(spare, x, ys, cw, 1, x0 + x, g.dir > 0 ? y0 + ys : y0 + ys - ln, cw, ln);
+      }
+    } else {
+      // Datamosh: blocks of the picture slide off and snap back, or repeat their neighbour
+      const bs = Math.max(6, Math.round(Math.max(unit * 0.8, Math.sqrt(w * h / 220)))), ph0 = S * 0.3 * g.rate;
+      for (let by = 0, j = 0; by < h; by += bs) for (let bx = 0; bx < w; bx += bs, j++) {
+        const q = hash32(g.seed, j, Math.floor(slot / (g.hold * 3 + 4))), kind = q % 5;
+        if (kind < 2) continue;
+        if (kind === 4) { X.drawImage(spare, Math.max(0, bx - bs), by, bs, bs, x0 + bx, y0 + by, bs * 2, bs); continue; }
+        const ph = mod(ph0 + frac(q >>> 3), 1), dx = g.dir * ph * bs * 2.2 * g.reach * (1 + e), dy = (frac(q >>> 9) - 0.5) * bs * 1.5 * ph;
+        X.drawImage(spare, bx, by, bs, bs, x0 + bx + dx, y0 + by + dy, bs, bs);
+      }
+    }
+    X.restore();
+  }, s);
+}
 const FLIP = ['#00e5ff', '#ff2bd6', '#fff35c', '#ffffff'];
 // Draw one live stroke. X: the frame buffer's context, in drawing space. P: { drum, by } from pulseFrame.
 export function drawLive(X, s, S, B, now, P) {
   const M = MATS[s.color], g = s._gl || setup(s), e = Math.min((P.by.get(s.id) || 0) + 0.5 * P.drum, 1.5);
   const slot = Math.floor(now / 170), T = reveal(s, S, B), c = colorOf(s), tiles = score.mode === 'tiles';
-  let pass;
-  if (M.wire) {
+  let pass, clearCells = null;
+  if (M.under) { drawUnder(X, s, g, S, T, slot, e, c); return; }
+  if (M.gl) {
+    const m = livePts(s, g, S, T, slot, e), geo = m > 1 ? LIVE[M.gl](s, g, S, m, e, slot) : {};
+    X.lineWidth = g.lw2 || (g.lw2 = clamp(g.base * 0.07, 0.0022, 0.006)); X.lineJoin = 'bevel'; X.lineCap = 'butt';
+    pass = (dx, dy, a, col) => {
+      X.strokeStyle = X.fillStyle = col || c; X.translate(dx, dy);
+      if (geo.far) { X.globalAlpha = a * 0.45; X.fill(geo.far); }
+      X.globalAlpha = a;
+      if (geo.line) X.stroke(geo.line);
+      if (geo.fill) X.fill(geo.fill);
+      X.translate(-dx, -dy);
+    };
+  } else if (M.wire) {
     const path = wirePath(s, g, S, T, slot, e);
     X.lineWidth = g.lw; X.lineJoin = 'bevel'; X.lineCap = 'butt';   // plain line ends: the cheapest to draw
     pass = (dx, dy, a, col, op) => { X.globalAlpha = a; X.globalCompositeOperation = op || 'source-over'; X.strokeStyle = col || c; X.translate(dx, dy); X.stroke(path); X.translate(-dx, -dy); };
   } else if (M.nodes) {
-    const { P: path, N } = nodesPath(s, g, S, T, slot, e), nr = g.els[0].R * 0.55 * (1 + 0.8 * Math.min(e, 1.2));
+    const { P: path, N } = nodesPath(s, g, S, T, slot, e), nr = Math.min(g.els[0].R * 0.55, 0.011) * (1 + 0.8 * Math.min(e, 1.2));   // points stay points under big brushes
     X.lineWidth = g.lw; X.lineJoin = 'bevel'; X.lineCap = 'butt';
     // The main pass (full strength, in the stroke's own colour) gets white points; copies get theirs in the copy's colour
     pass = (dx, dy, a, col) => {
@@ -160,9 +334,12 @@ export function drawLive(X, s, S, B, now, P) {
     };
   } else {
     const cells = liveCells(s, S, T);
+    // One character per cell: a code stroke wipes its cells first, so a stroke painted over another replaces it there
+    clearCells = () => { for (const q of cells) X.clearRect(q[0], q[1], GCELL, GCELL); };
     pass = (dx, dy, a, col, op) => { X.globalCompositeOperation = op || 'source-over'; drawCells(X, cells, g, col || c, S, slot, e, dx, dy, a); };
   }
   forCopies(X, () => {
+    if (clearCells) clearCells();
     if (g.fx === 'smear') {
       // Fewer trail copies where each one costs more: glyphs (an image copy per cell) and tiles (many copies of everything)
       const n = tiles ? (M.wire ? 1 : 0) : 2, osc = 0.5 + 0.5 * Math.sin(now / 1000 * g.rate + g.seed % 7), step = 0.011 * g.reach * (0.35 + osc + 1.6 * e) * g.dir;

@@ -1,4 +1,5 @@
 // Scheduling: schedule() every 25 ms with 120 ms lookahead. Density = Euclidean thinning, Probability = seeded hash.
+import { toneIdx } from '../styles/index.js';
 import { fs } from '../canvas/index.js';
 import { clamp, fold, hash32, hashFrac, lerp, mod, mtof, mulberry32 } from '../core/math.js';
 import { mix, score } from '../core/state.js';
@@ -25,7 +26,7 @@ export function playEvent(lane, ev, S) {
     // Free mode turning: each note is read from where its point has turned to. Higher on screen bends it up, and it drifts across the stereo field
     ev = { ...ev, shift: (ev.shift || 0) + Math.round(Math.max(MAP.hy, 0.35) * (ev.y - ev._ry) / 2 * fs() * MAP.span * MAP.rot.pitch), pan: lerp(ev.pan, clamp(ev._rx * fs(), -1, 1) * 0.6, MAP.rot.pan) };
   }
-  const bright = ARR.P.bright * MAP.colorMod[(ev.s.color) % 7].bright * toneEnv(inst);
+  const bright = ARR.P.bright * MAP.colorMod[toneIdx(ev.s) % 7].bright * toneEnv(inst);
   voice(inst, fold(mtof(lineNote(ev, inst))), t, ev.w * (inst === 'pad' ? 0.9 : 0.85), inst === 'pad' ? Math.max(dur, 1.2) : dur, ev.pan, bright, ev.s);
 }
 export function scheduleGrains(S0, S1) {

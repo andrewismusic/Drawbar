@@ -24,7 +24,11 @@ import { drawSpaceBg, drawTwinkles } from './space.js';
 export const cv = $('cv'), ctx = cv.getContext('2d');
 export const fb = document.createElement('canvas'), fctx = fb.getContext('2d');
 export const glowC = document.createElement('canvas'), gctx = glowC.getContext('2d');
-export const glowS = document.createElement('canvas'), gsctx = glowS.getContext('2d');
+export let glowS = document.createElement('canvas'), gsctx = glowS.getContext('2d');
+let glowT = document.createElement('canvas'), gtctx = glowT.getContext('2d');   // spare, for a redraw in the background
+// Tests set this to draw everything at once, as before v25, so results are ready straight away
+export let syncDraw = false;
+export const setSyncDraw = v => { syncDraw = v; };
 export const geo = { W: 600, H: 600, R: 282, Rcss: 282, wide: false };
 export let groupsDirty = true, discGrad = null, ITEMS = [], pool = [], poolB = [], canKey = '';
 // Ask for the still strokes to be redrawn on the next frame
@@ -56,8 +60,9 @@ export function ensureCanvases() {
   if (key === canKey) return;
   canKey = key;
   fb.width = fw; fb.height = fh;
-  glowC.width = glowS.width = Math.max(8, Math.round(fw / 6)); glowC.height = glowS.height = Math.max(8, Math.round(fh / 6));
-  pool = []; poolB = []; groupsDirty = true;
+  glowC.width = glowS.width = glowT.width = Math.max(8, Math.round(fw / 6)); glowC.height = glowS.height = glowT.height = Math.max(8, Math.round(fh / 6));
+  trimPool(pool, 0); trimPool(poolB, 0);
+  ITEMS = []; relight = null; fade = null; groupsDirty = true;
 }
 export function frameNorm(c, can) {
   const cd = cellDims();
@@ -119,7 +124,7 @@ export function computeHidden() { const J = hiddenStart(); hiddenStep(J, Infinit
 // After a new stroke or an erase, the hidden-stroke test runs a moment later, a few milliseconds per frame, so drawing
 // never waits for it. If the answer changed, the music is re-arranged and the layers are redrawn in the background.
 let hiddenAt = 0, hiddenJob = null, softWanted = false;
-export function checkHiddenSoon() { hiddenAt = performance.now() + 250; hiddenJob = null; }
+export function checkHiddenSoon(wait = 250) { hiddenAt = performance.now() + wait; hiddenJob = null; }
 function stepHiddenCheck(now) {
   if (!hiddenAt || now < hiddenAt || cur || erasing) return;
   if (!hiddenJob) hiddenJob = hiddenStart();
@@ -150,30 +155,60 @@ let lightNeeded = false;
 // Re-lighting while the picture turns: redraw the still strokes a slice per frame into a spare set of layers,
 // then cross-fade to them, so the light keeps up without ever stalling a frame
 export function stepRelight(now) {
-  const R = relight, S = R.list || (R.list = unitsOf(score.strokes)), budget = 500;
+  const R = relight, S = R.list || (R.list = unitsOf(score.strokes)), ms = R.build ? 8 : 6;
+  // A full redraw tunes its own budget: the browser paints after this returns, so only the frame gap shows the real cost
+  if (R.build && R.frames) buildBudget = frameDt > 30 ? Math.max(30, buildBudget * 0.6) : frameDt < 20 ? Math.min(4000, buildBudget * 1.25) : buildBudget;
+  const budget = R.build ? buildBudget : 500;
   let cost = 0;
-  const saved = composeRot;
+  const saved = composeRot, P = R.direct ? pool : poolB;
   setComposeRot(R.rot);
   const t0 = performance.now();
-  // Stop on the cost budget or after 6 ms, whichever comes first, so a re-light never holds a frame for long
-  while (R.i < S.length && cost < budget && performance.now() - t0 < 6) {
+  R.frames = (R.frames || 0) + 1;
+  // Stop on the cost budget or after a few ms, whichever comes first, so a redraw never holds a frame for long
+  while (R.i < S.length && cost < budget && performance.now() - t0 < ms) {
     const it = S[R.i++];
     if (it.list) {
       if (!R.cur) {
-        if (!poolB[R.gi]) { const c = document.createElement('canvas'); c.width = fb.width; c.height = fb.height; poolB[R.gi] = c; }
-        const c = poolB[R.gi++], x = c.getContext('2d');
+        if (!P[R.gi]) { const c = document.createElement('canvas'); c.width = fb.width; c.height = fb.height; P[R.gi] = c; }
+        const c = P[R.gi++], x = c.getContext('2d');
         x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, c.width, c.height); frameNorm(x, c);
         R.cur = { canvas: c, x }; R.items.push(R.cur);
       }
-      const ops = MATS[it.color].cost;
+      const ops = MATS[it.color].cost + (it.shape.stamps ? it.shape.stamps.length / 6 : 0);
       forCopies(R.cur.x, () => { drawUnit(R.cur.x, it); cost += ops; }, it);
+      if (R.build) for (const s of it.list) glowOf(R.g, s);
     } else { R.cur = null; R.items.push({ s: it.s }); }
   }
   setComposeRot(saved);
   if (R.i >= S.length) {
-    fade = { old: ITEMS, t0: now };
-    ITEMS = R.items; [pool, poolB] = [poolB, pool]; litRot = R.rot; relight = null;
+    relight = null;
+    if (R.direct) { trimPool(pool, R.gi); return; }
+    // A redraw that took a single frame just appears; a longer one fades in
+    if (!(R.build && R.frames === 1)) fade = { old: ITEMS, t0: now, both: R.build };
+    ITEMS = R.items; [pool, poolB] = [poolB, pool]; litRot = R.rot;
+    if (R.build) { [glowS, glowT] = [glowT, glowS]; [gsctx, gtctx] = [gtctx, gsctx]; trimPool(pool, R.gi); }
   }
+}
+// The soft glow of one still stroke, into a glow layer
+function glowOf(g, s) {
+  const M = MATS[s.color];
+  if (!M.glowA) return;
+  frameNorm(g, g.canvas); g.lineCap = 'round'; g.lineJoin = 'round'; g.shadowBlur = 4;
+  g.globalAlpha = M.glowA; g.strokeStyle = g.shadowColor = M.glow; g.lineWidth = bloomW(s);
+  forCopies(g, () => g.stroke(s._path), s);
+  g.globalAlpha = 1; g.shadowBlur = 0;
+}
+// A full redraw (pattern or knob change, undo, clip load) is spread over frames, about 8 ms each, so the animation never
+// stops for it (v25; it used to be one long pause, growing with strokes x copies). With something on screen, the new
+// picture is drawn out of sight and faded in; with nothing on screen yet, strokes appear as they are drawn.
+let buildBudget = 150, frameDt = 16;
+function startBuild(rot) {
+  groupsDirty = false; fade = null;
+  lightNeeded = score.strokes.some(s => isStill(s) && MATS[s.color].lit);
+  const direct = !ITEMS.length, g = direct ? gsctx : gtctx;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, g.canvas.width, g.canvas.height);
+  relight = { rot, i: 0, gi: 0, items: direct ? ITEMS : [], cur: null, build: true, direct, g };
+  if (direct) litRot = rot;
 }
 // Layers no longer used give their memory back at once (setting a canvas to 0 x 0 frees it; phones have little canvas memory)
 function trimPool(list, used) {
@@ -185,14 +220,17 @@ export function releaseCanvases() {
   trimPool(pool, 0); trimPool(poolB, 0);
   ITEMS = []; relight = null; fade = null; groupsDirty = true;
   if (quality !== 1) { quality = 1; relayout(); }
-  slowFor = fastFor = 0; frameEma = 16;
+  slowFor = fastFor = 0; frameEma = 16; buildBudget = 150;
 }
 // A new stroke on top: draw just that stroke into the top cached layer (one stroke x copies), instead of redrawing
 // every stroke. This is what keeps drawing fluid: the pause after a stroke no longer grows with the drawing.
 export function appendStroke(s) {
   if (groupsDirty) return;
   const M = MATS[s.color];
-  if (relight) relight = null;   // a re-light in progress would miss the new stroke; it starts again by itself
+  // A re-light in progress would miss the new stroke (it starts again by itself); a full redraw in progress takes it along
+  if (relight && relight.build && !relight.direct) { if (relight.list) relight.list.push(...unitsOf([s])); }
+  else if (relight && !relight.build) relight = null;
+  else if (relight && relight.direct) { if (relight.list) relight.list.push(...unitsOf([s])); return; }
   if (!isStill(s)) { ITEMS.push({ s }); return; }
   let top = ITEMS[ITEMS.length - 1];
   if (!top || !top.canvas) {
@@ -208,12 +246,7 @@ export function appendStroke(s) {
   frameNorm(top.x, top.canvas);
   forCopies(top.x, () => drawShape(top.x, s._shape, opsOf(s)), s);
   setComposeRot(saved);
-  if (M.glowA) {
-    frameNorm(gsctx, glowS); gsctx.lineCap = 'round'; gsctx.lineJoin = 'round'; gsctx.shadowBlur = 4;
-    gsctx.globalAlpha = M.glowA; gsctx.strokeStyle = gsctx.shadowColor = M.glow; gsctx.lineWidth = bloomW(s);
-    forCopies(gsctx, () => gsctx.stroke(s._path), s);
-    gsctx.globalAlpha = 1; gsctx.shadowBlur = 0;
-  }
+  glowOf(gsctx, s);
 }
 export function renderGroups(rot = 0) {
   relight = null; fade = null;
@@ -343,8 +376,8 @@ export let lastRebuildT = 0, needsRebuild = false;
 export let quality = 1, frameEma = 16, lastFrameT = 0, slowFor = 0, fastFor = 0;
 export function watchFrameRate(now) {
   const dt = lastFrameT ? Math.min(now - lastFrameT, 100) : 16;
-  lastFrameT = now;
-  if (document.hidden || erasing || cur) return;
+  lastFrameT = now; frameDt = dt;
+  if (document.hidden || erasing || cur || syncDraw) return;   // (tests hold the quality still)
   frameEma += (dt - frameEma) * 0.05;
   if (frameEma > 26) { slowFor++; fastFor = 0; } else if (frameEma < 15) { fastFor++; slowFor = 0; } else { slowFor = 0; fastFor = 0; }
   const next = slowFor > 90 && quality > 0.55 ? Math.max(0.55, quality - 0.15) : fastFor > 400 && quality < 1 ? Math.min(1, quality + 0.15) : quality;
@@ -361,23 +394,23 @@ export function frame(now) {
   const S = visNow(), B = beatAt(S), rot = rotAt(B), W = geo.W, H = geo.H, cd = cellDims();
   // While the picture turns, re-light the still strokes now and then so the light stays put (only when that is cheap)
   stepHiddenCheck(now);
-  if (groupsDirty) { renderGroups(rot); softWanted = false; }
-  else if (relight) stepRelight(now);
-  // A background redraw (after the hidden-stroke test changed its mind): same slice-per-frame path as re-lighting
-  else if (softWanted && !fade) { softWanted = false; relight = { rot: lightNeeded && !world().render.fixedLight ? rot + 0.03 : litRot, i: 0, gi: 0, items: [], cur: null }; }
+  if (groupsDirty && syncDraw) { renderGroups(rot); softWanted = false; }
+  else if ((groupsDirty || (softWanted && !fade)) && !(relight && relight.build)) { softWanted = false; startBuild(rot); }
+  if (relight) stepRelight(now);
   else if (!fade && lightNeeded && !world().render.fixedLight && rot !== litRot && Math.abs(mod(rot - litRot + Math.PI, TAU) - Math.PI) > 0.1) relight = { rot: rot + 0.03, i: 0, gi: 0, items: [], cur: null };
-  if (fade && now - fade.t0 > 160) fade = null;
+  if (fade && now - fade.t0 > (fade.both ? 120 : 160)) fade = null;
   setComposeRot(rot);
   fctx.setTransform(1, 0, 0, 1, 0, 0); fctx.clearRect(0, 0, fb.width, fb.height);
   gctx.setTransform(1, 0, 0, 1, 0, 0); gctx.clearRect(0, 0, glowC.width, glowC.height); gctx.drawImage(glowS, 0, 0);
-  const fa = fade ? clamp((now - fade.t0) / 160, 0, 1) : 1;
+  const fa = fade ? clamp((now - fade.t0) / (fade.both ? 120 : 160), 0, 1) : 1;
   let pulses = null;
   const still = reduceMotion.matches;   // reduced motion: live strokes hold still
   for (let j = 0; j < ITEMS.length; j++) {
     const it = ITEMS[j];
     if (it.canvas) {
       fctx.setTransform(1, 0, 0, 1, 0, 0);
-      if (fade && fade.old[j] && fade.old[j].canvas) { fctx.drawImage(fade.old[j].canvas, 0, 0); fctx.globalAlpha = fa; }
+      // Re-light: new over old. Redraw: the new picture comes in first, then the old one leaves (parts in both never dip)
+      if (fade && fade.old[j] && fade.old[j].canvas) { fctx.globalAlpha = fade.both ? Math.min(1, 2 - 2 * fa) : 1; fctx.drawImage(fade.old[j].canvas, 0, 0); fctx.globalAlpha = fade.both ? Math.min(1, 2 * fa) : fa; }
       fctx.drawImage(it.canvas, 0, 0); fctx.globalAlpha = 1;
       continue;
     }
@@ -392,7 +425,7 @@ export function frame(now) {
     forCopies(gctx, () => gctx.stroke(path), it.s);
     gctx.globalAlpha = 1;
   }
-  if (world().render.twinkle && !reduceMotion.matches) { frameNorm(fctx, fb); drawTwinkles(fctx, score.strokes, HIDDEN, S); }
+  if (world().render.twinkle && !reduceMotion.matches) { frameNorm(fctx, fb); drawTwinkles(fctx, score.strokes, HIDDEN, S, score.mode === 'free' ? 7 : 1); }
   frameNorm(fctx, fb);
   drawPreview(fctx);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);

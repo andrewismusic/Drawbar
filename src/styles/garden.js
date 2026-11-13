@@ -1,5 +1,6 @@
 // Garden: magical plants, fungi and fruit, one brush each. The plants grow along the line you draw (render/plants.js)
-// but the line itself is not drawn: fungi stand on their own stalks, flowers and fruit are just the heads.
+// Fungi stand on their own stalks with no line; flowers and fruit hang off a thin vine along the line (back in v25).
+// Coral is no longer offered in the tab (kept so old drawings still open).
 // Saturated flat colours with a film grain. No outlines, no glow, nothing slid toward the light: nothing to re-light.
 // reach: how far pieces reach past the line. beadEvery: thinning when used with Beads (not offered in the tab).
 import { F, GRAIN } from '../render/ops.js';

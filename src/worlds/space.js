@@ -5,7 +5,7 @@
 export default {
   id: 'space', name: 'Space',
   mats: ['Orion', 'Carina', 'Veil', 'Eagle', 'Stars', 'Gold stars'],
-  tools: ['glow', 'beads', 'erase'],
+  tools: ['glow', 'erase'],
   modes: ['free', 'kaleido', 'tiles'],
   limits: { copies: 6, tiles: 4, turns: 3, rotate: true },
   start: { mode: 'free', copies: 2, spiral: 0, tiles: 3, turns: 1, mirror: true, fscale: 50, frot: false, fmirror: false, tool: 'glow', color: 'Orion' },

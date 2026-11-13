@@ -17,6 +17,17 @@ const puff = (color, v) => make('puff' + color + v, g => {
   const r = mulberry32(hash32(v, 51));
   for (let i = 0; i < 6; i++) { const a = r() * TAU, d = r() * SZ * 0.2, rad = SZ * (0.2 + 0.18 * r()); rg(g, SZ / 2 + Math.cos(a) * d, SZ / 2 + Math.sin(a) * d, rad, [[0, rgba(color, 0.34)], [0.5, rgba(color, 0.14)], [1, rgba(color, 0)]]); }
 });
+// Filaments: a few thin curved strands, fading at both ends (the wispy threads at a nebula's edge)
+const filament = (color, v) => make('fil' + color + v, g => {
+  const r = mulberry32(hash32(v, 57));
+  g.lineCap = 'round'; g.shadowColor = color; g.shadowBlur = 3;
+  for (let i = 0; i < 5; i++) {
+    const y0 = SZ * (0.3 + 0.4 * r()), y1 = SZ * (0.3 + 0.4 * r()), c1 = SZ * (0.15 + 0.7 * r()), c2 = SZ * (0.15 + 0.7 * r()), x0 = SZ * (0.04 + 0.2 * r()), x1 = SZ * (0.76 + 0.2 * r());
+    const gr = g.createLinearGradient(x0, 0, x1, 0); gr.addColorStop(0, rgba(color, 0)); gr.addColorStop(0.3 + 0.4 * r(), rgba(color, 0.35 + 0.35 * r())); gr.addColorStop(1, rgba(color, 0));
+    g.strokeStyle = gr; g.lineWidth = 0.7 + 1.3 * r();
+    g.beginPath(); g.moveTo(x0, y0); g.bezierCurveTo(SZ * 0.35, c1, SZ * 0.65, c2, x1, y1); g.stroke();
+  }
+});
 // Dark dust: soaks up the light behind it
 const dust = v => make('dust' + v, g => {
   const r = mulberry32(hash32(v, 52));
@@ -61,18 +72,24 @@ const galaxy = (color, v) => make('gal' + color + v, g => {
 // line, thins and thickens along it, and its stars, wisps and the odd planet scatter far out, fainter with distance.
 const PLANETS = ['#d9a066', '#8fb7e8', '#c9785a', '#b7a6d9', '#9ad0b0'];
 export function spaceShape(M, id, line, beads) {
-  const r = mulberry32(hash32(id, 808)), st = [], tw = [], K = M.space, path = new Path2D();
+  const r = mulberry32(hash32(id, 808)), st = [], tw = [], dr = [], K = M.space, path = new Path2D();
+  // Star brushes keep to the line you draw (v25): no wandering, no thin patches, a short scatter
+  const tight = K.kind === 'stars', r2 = mulberry32(hash32(id, 809));   // r2: seeds for v25's additions, so older parts stay as they were
   const around = (x, y, d) => { const a = r() * TAU, k = d * Math.sqrt(r()); return [x + Math.cos(a) * k, y + Math.sin(a) * k]; };
   // Far scatter: most land near, a few very far (reach = how many R out the farthest go); returns [x, y, 0..1 distance]
   const far = (x, y, R, reach) => { const a = r() * TAU, u = Math.pow(r(), 1.7), d = R * (0.2 + reach * u); return [x + Math.cos(a) * d, y + Math.sin(a) * d, u]; };
   const tiny = (x, y, R, col, reach = 3.4) => { const [px, py, u] = far(x, y, R, reach), s = R * (0.02 + 0.09 * r() * r()) * (1 - 0.4 * u); st.push([dot(col), px, py, s, 0, (0.2 + 0.8 * r() * r()) * (1 - 0.55 * u) + 0.1]); };
   const bright = (x, y, s, col) => { st.push([star(col, r() < 0.5 ? 4 : 6), x, y, s, r() * TAU, 0.6 + 0.35 * r()]); tw.push([x, y, s, r() * TAU, 0.6 + 2.2 * r()]); };
   const extras = (x, y, R) => {
-    if (r() < 0.035) { const [px, py] = far(x, y, R, 3); st.push([planet(PLANETS[Math.floor(r() * PLANETS.length)]), px, py, R * (0.05 + 0.1 * r()), r() * TAU, 0.95, true]); }
-    if (r() < 0.03) { const [px, py] = far(x, y, R, 3.5); st.push([galaxy('#a9c4ff', Math.floor(r() * 3)), px, py, R * (0.2 + 0.25 * r()), r() * TAU, 0.5 + 0.4 * r()]); }
+    if (r() < 0.035) { const [px, py] = far(x, y, R, tight ? 1.2 : 3); st.push([planet(PLANETS[Math.floor(r() * PLANETS.length)]), px, py, R * (0.05 + 0.1 * r()), r() * TAU, 0.95, true]); }
+    if (r() < 0.03) { const [px, py] = far(x, y, R, tight ? 1.4 : 3.5); st.push([galaxy('#a9c4ff', Math.floor(r() * 3)), px, py, R * (0.2 + 0.25 * r()), r() * TAU, 0.5 + 0.4 * r()]); }
   };
-  const knot = (x, y, R) => {
+  const knot = (x, y, R, ang = 0) => {
     if (K.kind === 'nebula') {
+      // Thin filaments streaming along the cloud, lighter than the gas, a little off to either side
+      if (r2() < 0.15) { const side = r2() < 0.5 ? -1 : 1, d = R * (0.5 + 0.9 * r2()), fx = x - Math.sin(ang) * d * side, fy = y + Math.cos(ang) * d * side; st.push([filament(r2() < 0.5 ? '#ffffff' : K.a, Math.floor(r2() * 4)), fx, fy, R * (0.8 + 0.9 * r2()), ang + (r2() - 0.5) * 0.9, 0.3 + 0.35 * r2(), true]); }
+      // Slow drift: now and then a puff or a filament that wanders about its place (drawn each frame, see drawTwinkles)
+      if (r2() < 0.22 && dr.length < 7) { const fil = r2() < 0.35, [hx, hy] = [x + (r2() - 0.5) * R * 1.6, y + (r2() - 0.5) * R * 1.6]; dr.push([fil ? filament('#ffffff', Math.floor(r2() * 4)) : puff(r2() < 0.5 ? K.a : K.b, Math.floor(r2() * 3)), hx, hy, R * (fil ? 1.1 + 0.8 * r2() : 0.5 + 0.6 * r2()), r2() * TAU, 0.05 + 0.09 * r2(), R * (0.5 + 0.7 * r2()), fil ? ang + (r2() - 0.5) : r2() * TAU, fil ? 0.4 : 0.3]); }
       const [ox, oy] = around(x, y, R * 0.7); st.push([puff(K.b, st.length % 3), ox, oy, R * (0.9 + 0.9 * r()), r() * TAU, 0.35 + 0.3 * r(), true]);
       const [mx, my] = around(x, y, R * 0.4); st.push([puff(K.a, (st.length + 1) % 3), mx, my, R * (0.45 + 0.6 * r()), r() * TAU, 0.4 + 0.4 * r(), true]);
       if (r() < 0.3) { const [wx, wy, u] = far(x, y, R, 2.6); st.push([puff(r() < 0.5 ? K.a : K.b, st.length % 3), wx, wy, R * (0.3 + 0.5 * r()), r() * TAU, 0.3 * (1 - 0.6 * u), true]); }   // outlying wisp
@@ -82,8 +99,8 @@ export function spaceShape(M, id, line, beads) {
     } else if (K.kind === 'dust') {
       st.push([dust(st.length % 3), ...around(x, y, R * 0.4), R * (0.7 + 0.6 * r()), r() * TAU, 0.9, true]);
     } else if (K.kind === 'stars') {
-      for (let k = 0, n = 1 + Math.floor(r() * r() * 11); k < n; k++) tiny(x, y, R, r() < 0.7 ? K.a : K.b, 4);
-      if (r() < 0.25) { const [sx, sy] = far(x, y, R, 3); bright(sx, sy, R * (0.15 + 0.7 * r() * r() * r()), r() < 0.6 ? K.a : K.b); }
+      for (let k = 0, n = 2 + Math.floor(r() * r() * 10); k < n; k++) tiny(x, y, R, r() < 0.7 ? K.a : K.b, 0.85);
+      if (r() < 0.25) { const [sx, sy] = far(x, y, R, 0.7); bright(sx, sy, R * (0.15 + 0.7 * r() * r() * r()), r() < 0.6 ? K.a : K.b); }
       extras(x, y, R);
     }
   };
@@ -108,15 +125,15 @@ export function spaceShape(M, id, line, beads) {
       const R = R0 * (0.5 + 0.5 * w[i] / (w0 * 1.35) + 0.2) * (0.7 + 0.6 * r());
       next = L[i] + R * 0.34;
       const a = Math.max(i - 1, 0), b = Math.min(i + 1, n - 1), dx = xs[b] - xs[a], dy = ys[b] - ys[a], d = Math.hypot(dx, dy) || 1;
-      const off = R0 * (0.75 * Math.sin(L[i] * f1 + p1) + 0.4 * Math.sin(L[i] * f2 + p2)), x = xs[i] - dy / d * off, y = ys[i] + dx / d * off;
-      if (K.kind !== 'galaxy' && Math.sin(L[i] * f3 + p3) < -0.55 && r() < 0.75) { if (r() < 0.5) tiny(x, y, R, '#ffffff'); continue; }   // a thin patch
+      const off = tight ? 0 : R0 * (0.75 * Math.sin(L[i] * f1 + p1) + 0.4 * Math.sin(L[i] * f2 + p2)), x = xs[i] - dy / d * off, y = ys[i] + dx / d * off;
+      if (K.kind !== 'galaxy' && !tight && Math.sin(L[i] * f3 + p3) < -0.55 && r() < 0.75) { if (r() < 0.5) tiny(x, y, R, '#ffffff'); continue; }   // a thin patch
       if (K.kind === 'galaxy') {
         if (gap <= 0) { st.push([galaxy(K.a, st.length % 3), ...around(x, y, R * 0.5), R * (0.6 + 0.6 * r()), r() * TAU, 1]); gap = 4 + Math.floor(r() * 4); }
         gap--; if (r() < 0.5) tiny(x, y, R * 1.5, '#ffffff');
-      } else knot(x, y, R);
+      } else knot(x, y, R, Math.atan2(dy, dx));
     }
   }
-  return { paths: { 1: path }, w0: line ? line.w0 : beads[0].r, ink: null, stamps: st, tw: tw.slice(0, 8), noHide: true };
+  return { paths: { 1: path }, w0: line ? line.w0 : beads[0].r, ink: null, stamps: st, tw: tw.slice(0, 8), drift: dr, noHide: true };
 }
 export function drawStamps(c, stamps) {
   for (const [img, x, y, r, turn, a, over] of stamps) {
@@ -127,8 +144,22 @@ export function drawStamps(c, stamps) {
   c.globalCompositeOperation = 'source-over'; c.globalAlpha = 1;
 }
 // Twinkle: a few stars per stroke swell and fade, each at its own pace. X is the frame buffer, in drawing space.
-export function drawTwinkles(X, strokes, hidden, S) {
+// maxDrift: how many drifting pieces per stroke (fewer where there are many copies: each is an image copy per frame)
+export function drawTwinkles(X, strokes, hidden, S, maxDrift = 7) {
   const flare = star('#ffffff', 4);
+  // Drifting gas and filaments: each circles its place slowly, turning a little (laid over, like the rest of the gas)
+  for (const s of strokes) {
+    const dr = s._shape && s._shape.drift;
+    if (!dr || !dr.length || hidden.has(s)) continue;
+    forCopies(X, () => {
+      for (let k = 0; k < dr.length && k < maxDrift; k++) {
+        const [img, x, y, r, ph, rate, reach, turn, a] = dr[k];
+        const t = S * rate + ph;
+        X.globalAlpha = a * (0.65 + 0.35 * Math.sin(t * 1.7));
+        X.save(); X.translate(x + Math.cos(t) * reach, y + Math.sin(t * 0.8) * reach * 0.7); X.rotate(turn + 0.25 * Math.sin(t * 0.6)); X.drawImage(img, -r, -r, 2 * r, 2 * r); X.restore();
+      }
+    }, s);
+  }
   X.globalCompositeOperation = 'lighter';
   for (const s of strokes) {
     const tw = s._shape && s._shape.tw;

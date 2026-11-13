@@ -38,6 +38,14 @@ comicCloud.tintOps = cloudT; comicCloud.label = 'Cloud';
 comicCloud.swatchFor = c => `radial-gradient(circle at 30% 40%, ${tint(c, 0.9)} 0 22%, transparent 23%), radial-gradient(circle at 62% 38%, ${tint(c, 0.9)} 0 24%, transparent 25%), radial-gradient(circle at 48% 62%, ${tint(c, 0.9)} 0 26%, ${tint(c, 0.3)} 27% 34%, ${INKC} 36%)`;
 inkHatch.tintOps = hatchT; inkHatch.label = 'Hatch';
 inkHatch.swatchFor = c => `repeating-linear-gradient(45deg, ${INKC} 0 1.5px, transparent 1.5px 5px), radial-gradient(circle at 36% 32%, ${tint(c, 0.72)} 0 40%, ${tint(c, 0.5)} 41% 62%, ${INKC} 64%)`;
+// Screentone: dots that shrink across the mark, from heavy on the shadow side to fine on the light side
+const toneT = c => { const paper = tint(c, 0.86); return [INKL(-0.1), F(1, paper), CLIP, PAT('dotsL', c), F(1, paper, 0.75), PAT('dots', c, 0.75), F(1, paper, 1.55), PAT('dotsS', c, 1.55), END]; };
+export const screentone = { name: 'Screentone', label: 'Tone', accent: '#ee3b3f', glow: '#ee3b3f', glowA: 0, make: () => toneT('#ee3b3f'), comic: true, tintOps: toneT,
+  swatch: '#ee3b3f', swatchFor: c => `radial-gradient(${c} 0 38%, transparent 40%) 0 0 / 6px 6px, radial-gradient(circle, ${tint(c, 0.86)} 0 60%, ${INKC} 64%)` };
+// Brush ink: a loaded brush that runs dry: a solid start, then bristle streaks that thin out and skip. No outline, unlit.
+const inkT = c => [F(1, c), F('br', c)];
+export const brushInk = { name: 'Brush ink', label: 'Ink', accent: '#0c0c12', glow: '#0c0c12', glowA: 0, make: () => inkT('#ee3b3f'), extra: 'bristle', tintOps: inkT,
+  swatch: '#ee3b3f', swatchFor: c => `repeating-linear-gradient(100deg, ${c} 0 2px, transparent 2px 3.5px), linear-gradient(90deg, ${c} 0 45%, transparent 45%), #1a1e2e` };
 // Pop: flat colour under big Ben-Day dots, one hard highlight
 export const pop = { name: 'Pop', label: 'Pop', accent: '#ee3b3f', glow: '#ee3b3f', glowA: 0, make: () => popT('#ee3b3f'), comic: true, tintOps: popT,
   swatch: '#ee3b3f', swatchFor: c => `radial-gradient(circle at 30% 30%, #fff 0 9%, transparent 10%), radial-gradient(${shade(c, 0.42)} 0 30%, transparent 32%) 0 0 / 7px 7px, radial-gradient(circle, ${c} 0 60%, ${INKC} 64%)` };

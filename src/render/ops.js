@@ -33,22 +33,26 @@ function grainPattern(c) {
 }
 export const STROKE = (k, lw, c = '#0c0c12') => ({ t: 'stroke', k, lw, c });
 export const halfTiles = new Map();
+// Pattern tiles are drawn large (96 px for a 12-unit tile) so dots and hatching stay sharp under big brushes (v25:
+// at 12 px they blurred once the brush was large). dotsS / dotsL: smaller and larger dots, for screentone.
+const TILE = 96, TU = TILE / 12;
 export function patTile(kind, color) {
   const key = kind + color;
   let tile = halfTiles.get(key);
   if (!tile) {
-    tile = document.createElement('canvas'); tile.width = tile.height = 12;
-    const g = tile.getContext('2d'); g.fillStyle = g.strokeStyle = color;
+    tile = document.createElement('canvas'); tile.width = tile.height = TILE;
+    const g = tile.getContext('2d'); g.fillStyle = g.strokeStyle = color; g.scale(TU, TU);
     if (kind === 'scan') { g.fillRect(0, 0, 12, 2); g.fillRect(0, 6, 12, 2); }
-    else if (kind === 'dots') { g.beginPath(); g.arc(3, 3, 2.1, 0, TAU); g.arc(9, 9, 2.1, 0, TAU); g.fill(); }
+    else if (kind.startsWith('dots')) { const r = kind === 'dotsS' ? 1.1 : kind === 'dotsL' ? 3.3 : 2.1; g.beginPath(); g.arc(3, 3, r, 0, TAU); g.fill(); g.beginPath(); g.arc(9, 9, r, 0, TAU); g.fill(); if (r > 3) for (const [x, y] of [[-3, 9], [15, 9], [9, -3], [9, 15], [-3, -3], [15, 3], [3, 15], [15, 15]]) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); } }
     else { g.lineWidth = 1.9; g.beginPath(); g.moveTo(-3, 15); g.lineTo(15, -3); g.moveTo(-9, 9); g.lineTo(9, -9); g.moveTo(3, 21); g.lineTo(21, 3); if (kind === 'cross') { g.moveTo(-3, -3); g.lineTo(15, 15); g.moveTo(-9, 3); g.lineTo(9, 21); g.moveTo(3, -9); g.lineTo(21, 9); } g.stroke(); }
     halfTiles.set(key, tile);
   }
   return tile;
 }
-export function halftone(c, color, w0, kind = 'dots') {
-  const pat = c.createPattern(patTile(kind, color), 'repeat'), k = w0 * (kind === 'dots' ? 0.6 : 0.7) / 12;
-  pat.setTransform(new DOMMatrix([k, 0, 0, k, 0, 0]));
+// fx, fy: undo a slide, so screentone bands slid toward the light keep one dot grid
+export function halftone(c, color, w0, kind = 'dots', fx = 0, fy = 0) {
+  const pat = c.createPattern(patTile(kind, color), 'repeat'), k = w0 * (kind.startsWith('dots') ? 0.6 : 0.7) / TILE;
+  pat.setTransform(new DOMMatrix([k, 0, 0, k, fx, fy]));
   return pat;
 }
 export const LSX = -0.552, LSY = -0.834;
@@ -89,7 +93,7 @@ export function drawShape(c, sh, ops) {
       continue;
     }
     c.globalAlpha = o.a;
-    c.fillStyle = o.pat ? halftone(c, o.c, sh.wd || w0, o.pat) : o.c;
+    c.fillStyle = o.pat ? (o.pat.startsWith('dots') ? halftone(c, o.c, sh.wd || w0, o.pat, -dx, -dy) : halftone(c, o.c, sh.wd || w0, o.pat)) : o.c;
     c.translate(dx, dy); c.fill(path); c.translate(-dx, -dy);
   }
   c.globalAlpha = 1;

@@ -114,17 +114,18 @@ const HEADS = {
   },
 };
 // How each plant grows along a line, in multiples of the line's half-width: gap between plants, stalk length (0 = no
-// stalk: flowers and fruit are just heads, sitting on the line), head size, stalk width, and which side (up = toward the top of the drawing, alt = alternating, any = either)
+// stalk), head size, stalk width, vine (half-width of a vine drawn along the line itself: flowers and fruit hang off a
+// vine since v25; fungi stand alone), and which side (up = toward the top of the drawing, alt = alternating, any = either)
 const SPROUT = {
   glowcap: { gap: [1.6, 2.8], len: [1.2, 2.8], R: [0.8, 1.3], w: 0.16, side: 'up' },
   bellcap: { gap: [1.3, 2.3], len: [1.4, 3.2], R: [0.55, 0.95], w: 0.14, side: 'up' },
   trumpet: { gap: [1.9, 2.9], len: [0.7, 1.8], R: [0.9, 1.3], w: 0.14, side: 'up' },
-  spiral: { gap: [1.0, 1.7], len: [0, 0], R: [0.7, 1.2], w: 0, side: 'alt' },
+  spiral: { gap: [1.3, 2.0], len: [0.5, 1.2], R: [0.7, 1.2], w: 0.1, side: 'alt', vine: 0.13 },
   coral: { gap: [3.0, 4.2], len: [0.3, 0.6], R: [1.1, 1.6], w: 0.2, side: 'up' },
-  moonberry: { gap: [1.0, 1.7], len: [0, 0], R: [0.7, 1.0], w: 0, side: 'any' },
-  lantern: { gap: [1.3, 2.2], len: [0, 0], R: [0.7, 1.0], w: 0, side: 'any' },
+  moonberry: { gap: [1.2, 1.9], len: [0.5, 1.3], R: [0.7, 1.0], w: 0.09, side: 'alt', vine: 0.13 },
+  lantern: { gap: [1.5, 2.4], len: [0.6, 1.5], R: [0.7, 1.0], w: 0.08, side: 'alt', vine: 0.12 },
   puffball: { gap: [1.4, 2.3], len: [1.0, 2.4], R: [0.7, 1.1], w: 0.13, side: 'up' },
-  starbloom: { gap: [2.2, 3.2], len: [0, 0], R: [1.0, 1.5], w: 0, side: 'any' },
+  starbloom: { gap: [2.4, 3.4], len: [0.6, 1.4], R: [1.0, 1.5], w: 0.1, side: 'alt', vine: 0.14 },
 };
 
 // Grow a plant. keys: the piece names this plant's material colours. Returns { key: Path2D, ..., all: every piece }.
@@ -140,6 +141,18 @@ export function growPlant(kind, keys, id, line, beads) {
     let sy = 0;
     for (let i = 0; i < n; i++) sy += ny[i];
     const up = sy > 0 ? -1 : 1;
+    if (S.vine) {
+      // The vine: thin segments and round joints along the line, all wound the same way so they fill as one piece
+      const hw = w0 * S.vine, V = P.stalk, step = Math.max(1, Math.floor(n / 90));
+      let a = 0;
+      circ(V, [xs[0], ys[0]], hw);
+      for (let i = step; a < n - 1; i += step) {
+        const b = Math.min(i, n - 1), dx = xs[b] - xs[a], dy = ys[b] - ys[a], dl = Math.hypot(dx, dy) || 1e-6, px = -dy / dl * hw, py = dx / dl * hw;
+        V.moveTo(xs[a] - px, ys[a] - py); V.lineTo(xs[b] - px, ys[b] - py); V.lineTo(xs[b] + px, ys[b] + py); V.lineTo(xs[a] + px, ys[a] + py); V.closePath();
+        circ(V, [xs[b], ys[b]], hw);
+        a = b;
+      }
+    }
     let d = w0 * rnd(), j = 0, alt = 1;
     while (d < L[n - 1]) {
       while (j < n - 1 && L[j] < d) j++;
