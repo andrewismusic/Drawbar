@@ -13,3 +13,5 @@ export const spaceMats = [
   mat('Galaxy', 'galaxy', '#a9c4ff', '#ffe2a8', 'radial-gradient(ellipse 46% 24% at 50% 50%, #fff6e0 0 20%, #a9c4ff 50%, transparent 100%), #03040a'),
   mat('Dust', 'dust', '#3a3148', '#3a3148', 'radial-gradient(circle, #05040a 0 40%, #2a2338 75%)'),
 ];
+// Stars is stars only; Gold stars also brings the odd planet (v28)
+spaceMats[5].space.planets = true;

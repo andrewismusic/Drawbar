@@ -230,11 +230,17 @@ const LIVE = {
   // Points circling the line: near ones big and bright, far ones small and dim
   cloud(s, g, S, m, e) {
     const near = new Path2D(), far = new Path2D(), px = g.px, py = g.py, w = s._w, d0 = g.base * 0.1;
+    // The stroke's own options (set beside the brushes): the points' shape, and how much their sizes vary
+    const shape = (s.pt && s.pt.shape) || 'square', vary = (s.pt ? s.pt.vary : 50) / 100;
     for (const q of g.pc) {
       if (q.i >= m || q.i < g.m0) continue;
-      const a = q.th + q.sp * S * g.rate, lat = q.rad * w[q.i] * Math.cos(a) * (1 + 0.6 * e), dep = Math.sin(a), d = d0 * q.sz * (1 + 0.45 * dep) * (1 + 0.5 * e);
-      const x = px[q.i] + s._nx[q.i] * lat, y = py[q.i] + s._ny[q.i] * lat;
-      (dep > -0.2 ? near : far).rect(x - d / 2, y - d / 2, d, d);
+      const a = q.th + q.sp * S * g.rate, lat = q.rad * w[q.i] * Math.cos(a) * (1 + 0.6 * e), dep = Math.sin(a);
+      const d = d0 * Math.max(0.25, 1.05 + (q.sz - 1.05) * vary * 2.6) * (1 + 0.45 * dep * (0.3 + vary)) * (1 + 0.5 * e), h = d / 2;
+      const x = px[q.i] + s._nx[q.i] * lat, y = py[q.i] + s._ny[q.i] * lat, P = dep > -0.2 ? near : far;
+      if (shape === 'circle') { P.moveTo(x + h * 1.1, y); P.arc(x, y, h * 1.1, 0, TAU); }
+      else if (shape === 'triangle') { P.moveTo(x, y - h * 1.3); P.lineTo(x + h * 1.2, y + h * 0.8); P.lineTo(x - h * 1.2, y + h * 0.8); P.closePath(); }
+      else if (shape === 'plus') { P.rect(x - h * 1.3, y - h * 0.38, d * 1.3, d * 0.38); P.rect(x - h * 0.38, y - h * 1.3, d * 0.38, d * 1.3); }
+      else P.rect(x - h, y - h, d, d);
     }
     return { fill: near, far };
   },

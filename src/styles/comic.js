@@ -43,7 +43,7 @@ const toneT = c => { const paper = tint(c, 0.86); return [INKL(-0.1), F(1, paper
 export const screentone = { name: 'Screentone', label: 'Tone', accent: '#ee3b3f', glow: '#ee3b3f', glowA: 0, make: () => toneT('#ee3b3f'), comic: true, tintOps: toneT,
   swatch: '#ee3b3f', swatchFor: c => `radial-gradient(${c} 0 38%, transparent 40%) 0 0 / 6px 6px, radial-gradient(circle, ${tint(c, 0.86)} 0 60%, ${INKC} 64%)` };
 // Brush ink: all brush hairs, close-packed where the brush is loaded, thinning and skipping as each hair runs dry. No outline, unlit.
-const inkT = c => [F('br', c)];
+const inkT = c => [F('br', c), { t: 'tooth' }];
 export const brushInk = { name: 'Brush ink', label: 'Ink', accent: '#0c0c12', glow: '#0c0c12', glowA: 0, make: () => inkT('#ee3b3f'), extra: 'bristle', tintOps: inkT,
   swatch: '#ee3b3f', swatchFor: c => `repeating-linear-gradient(100deg, ${c} 0 2px, transparent 2px 3.5px), linear-gradient(90deg, ${c} 0 45%, transparent 45%), #1a1e2e` };
 // Pop: flat colour under big Ben-Day dots, one hard highlight

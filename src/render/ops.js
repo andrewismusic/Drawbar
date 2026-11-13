@@ -31,6 +31,20 @@ function grainPattern(c) {
   pat.setTransform(new DOMMatrix([0.0026, 0, 0, 0.0026, 0, 0]));
   return pat;
 }
+let toothTile = null;
+function toothPattern(c) {
+  if (!toothTile) {
+    toothTile = document.createElement('canvas'); toothTile.width = toothTile.height = 160;
+    const g = toothTile.getContext('2d'); let s = 4711;
+    const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    // soft patches where the ink sits a little thinner, then specks of bare paper
+    for (let i = 0; i < 26; i++) { const x = r() * 160, y = r() * 160, rad = 10 + 26 * r(), gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, `rgba(0,0,0,${0.03 + 0.07 * r()})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; for (const ox of [-160, 0, 160]) for (const oy of [-160, 0, 160]) { g.save(); g.translate(ox, oy); g.fillRect(x - rad, y - rad, rad * 2, rad * 2); g.restore(); } }
+    for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(0,0,0,${0.12 + 0.5 * r() * r()})`; g.fillRect(Math.floor(r() * 160), Math.floor(r() * 160), 1 + (r() < 0.2 ? 1 : 0), 1); }
+  }
+  const pat = c.createPattern(toothTile, 'repeat');
+  pat.setTransform(new DOMMatrix([0.002, 0, 0, 0.002, 0, 0]));
+  return pat;
+}
 export const STROKE = (k, lw, c = '#0c0c12') => ({ t: 'stroke', k, lw, c });
 export const halfTiles = new Map();
 // Pattern tiles are drawn large (96 px for a 12-unit tile) so dots and hatching stay sharp under big brushes (v25:
@@ -74,6 +88,12 @@ export function drawShape(c, sh, ops) {
     if (o.t === 'clip') { c.save(); c.clip(sh.paths[1]); continue; }
     if (o.t === 'end') { c.restore(); continue; }
     if (o.t === 'ink' && !sh.ink) continue;
+    if (o.t === 'tooth') {
+      // Paint: the paper's tooth shows through the ink as fine specks and uneven patches. It is cut out of the
+      // stroke's own sprite (so nothing beneath is touched); where strokes are drawn straight to the layer it is skipped.
+      if (c.sprite && sh.paths.br) { c.globalCompositeOperation = 'destination-out'; c.globalAlpha = 1; c.fillStyle = toothPattern(c); c.fill(sh.paths.br); c.globalCompositeOperation = 'source-over'; }
+      continue;
+    }
     if (o.t === 'grain') { if (sh.paths.all) { c.globalAlpha = o.a; c.fillStyle = grainPattern(c); c.fill(sh.paths.all); c.globalAlpha = 1; } continue; }
     if (o.t === 'stamps') { if (sh.stamps) drawStamps(c, sh.stamps); continue; }
     if (o.t === 'glyphs') { if (sh.cells) drawGlyphs(c, sh.cells, o.c); continue; }

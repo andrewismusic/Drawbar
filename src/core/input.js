@@ -76,7 +76,7 @@ export function finishStroke(e) {
   if (Math.hypot(p.x - last[0], p.y - last[1]) > 0.002) cur.pts.push([p.x, p.y, t, pressureOf(e)]);
   const pts = cur.pts.length > 2 ? smoothStroke(cur.pts, cur.size) : cur.pts;
   const S = sessionNow();
-  const s = { id: takeId(), tool: TOOL[cur.tool].as || cur.tool, head: cur.tool === 'trace' || undefined, color: cur.color, size: cur.size, fx: MATS[cur.color].live ? score.fx : undefined, tint: cur.tint, pts, start: S, startBeat: Math.round(beatAt(S) * 4) / 4 };
+  const s = { id: cur.sid, tool: TOOL[cur.tool].as || cur.tool, head: cur.tool === 'trace' || undefined, pt: cur.pt, color: cur.color, size: cur.size, fx: MATS[cur.color].live ? score.fx : undefined, tint: cur.tint, pts, start: S, startBeat: Math.round(beatAt(S) * 4) / 4 };
   cur = null;
   prepare(s);
   checkpoint();
@@ -105,7 +105,7 @@ export function initInput() {
     } else if (TOOL[ui.tool].stamp) {
       // Stamp: a tap places it at the size bar's size; dragging sets its size and turns it to point at the finger
       cur = { id: e.pointerId, stamp: TOOL[ui.tool].stamp, tool: ui.tool, color: ui.color, cx: p.x, cy: p.y, r: stampRadius(ui.brushV) / fs(), rot: -Math.PI / 2, moved: false, pts: [] };
-    } else cur = { id: e.pointerId, tool: ui.tool, color: ui.color, tint: world().colors ? ui.tint : undefined, size: brushSize(ui.brushV) / fs(), pts: [[p.x, p.y, 0, pressureOf(e)]], t0: e.timeStamp / 1000, sx: p.x, sy: p.y };
+    } else cur = { id: e.pointerId, sid: takeId(), pt: MATS[ui.color].gl === 'cloud' ? { ...ui.pt } : undefined, tool: ui.tool, color: ui.color, tint: world().colors ? ui.tint : undefined, size: brushSize(ui.brushV) / fs(), pts: [[p.x, p.y, 0, pressureOf(e)]], t0: e.timeStamp / 1000, sx: p.x, sy: p.y };
     e.preventDefault();
   });
   cv.addEventListener('pointermove', e => {

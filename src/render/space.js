@@ -33,11 +33,19 @@ const dust = v => make('dust' + v, g => {
   const r = mulberry32(hash32(v, 52));
   for (let i = 0; i < 5; i++) { const a = r() * TAU, d = r() * SZ * 0.2; rg(g, SZ / 2 + Math.cos(a) * d, SZ / 2 + Math.sin(a) * d, SZ * (0.2 + 0.16 * r()), [[0, 'rgba(6,5,12,0.55)'], [0.6, 'rgba(6,5,12,0.2)'], [1, 'rgba(6,5,12,0)']]); }
 });
-// A small planet: a shaded disc, lit from the upper left
+// A small planet. Always upright and lit from the upper left, so every planet in the picture agrees about where the
+// light is (v28: they used to be turned at random, which is much of why they looked pasted in). Soft edge, a dark
+// side that is not quite black, a thin bright limb on the lit side and a faint haze around it.
 const planet = color => make('planet' + color, g => {
-  g.beginPath(); g.arc(SZ / 2, SZ / 2, SZ * 0.42, 0, TAU); g.clip();
-  rg(g, SZ * 0.36, SZ * 0.34, SZ * 0.6, [[0, '#ffffff'], [0.18, color], [0.75, rgba(color, 0.35)], [1, 'rgba(5,5,12,1)']]);
-  g.globalAlpha = 0.25; g.fillStyle = '#000'; for (let i = 0; i < 3; i++) g.fillRect(0, SZ * (0.38 + i * 0.12), SZ, SZ * 0.035);
+  const c = SZ / 2, R = SZ * 0.3;
+  rg(g, c, c, SZ * 0.5, [[0, rgba(color, 0.16)], [0.6, rgba(color, 0.1)], [0.8, rgba(color, 0.03)], [1, rgba(color, 0)]]);   // haze
+  g.save(); g.beginPath(); g.arc(c, c, R, 0, TAU); g.clip();
+  rg(g, c - R * 0.55, c - R * 0.6, R * 2.1, [[0, '#f4f0ea'], [0.12, color], [0.42, rgba(color, 0.55)], [0.62, 'rgba(14,14,28,0.96)'], [1, 'rgba(6,6,14,0.98)']]);
+  g.globalAlpha = 0.14; g.fillStyle = '#000'; for (let i = 0; i < 3; i++) g.fillRect(0, c - R * 0.5 + i * R * 0.42, SZ, R * 0.1);
+  g.restore();
+  // soften the disc's edge, then a thin limb of light up-left
+  g.globalCompositeOperation = 'destination-out'; g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 1.6; g.beginPath(); g.arc(c, c, R, 0, TAU); g.stroke();
+  g.globalCompositeOperation = 'lighter'; g.strokeStyle = rgba('#ffffff', 0.35); g.lineWidth = 1.1; g.beginPath(); g.arc(c, c, R - 0.8, Math.PI * 0.95, Math.PI * 1.6); g.stroke();
 });
 // A point of light
 const dot = color => make('dot' + color, g => rg(g, SZ / 2, SZ / 2, SZ / 2, [[0, '#ffffff'], [0.12, rgba(color, 0.95)], [0.4, rgba(color, 0.25)], [1, rgba(color, 0)]]));
@@ -72,16 +80,18 @@ const galaxy = (color, v) => make('gal' + color + v, g => {
 // line, thins and thickens along it, and its stars, wisps and the odd planet scatter far out, fainter with distance.
 const PLANETS = ['#d9a066', '#8fb7e8', '#c9785a', '#b7a6d9', '#9ad0b0'];
 export function spaceShape(M, id, line, beads) {
-  const r = mulberry32(hash32(id, 808)), st = [], tw = [], dr = [], K = M.space, path = new Path2D();
+  const r = mulberry32(hash32(id, 808)), st = [], tw = [], dr = [], up = [], K = M.space, path = new Path2D();
+  // A planet: upright (see drawUpright), laid over, sized so its disc is r across
+  const addPlanet = (x, y, rad) => up.push([planet(PLANETS[Math.floor(r() * PLANETS.length)]), x, y, rad / 0.6, 0.92, true]);
   // Star brushes keep to the line you draw (v25): no wandering, no thin patches, a short scatter
   const tight = K.kind === 'stars', r2 = mulberry32(hash32(id, 809));   // r2: seeds for v25's additions, so older parts stay as they were
   const around = (x, y, d) => { const a = r() * TAU, k = d * Math.sqrt(r()); return [x + Math.cos(a) * k, y + Math.sin(a) * k]; };
   // Far scatter: most land near, a few very far (reach = how many R out the farthest go); returns [x, y, 0..1 distance]
   const far = (x, y, R, reach) => { const a = r() * TAU, u = Math.pow(r(), 1.7), d = R * (0.2 + reach * u); return [x + Math.cos(a) * d, y + Math.sin(a) * d, u]; };
   const tiny = (x, y, R, col, reach = 3.4) => { const [px, py, u] = far(x, y, R, reach), s = R * (0.02 + 0.09 * r() * r()) * (1 - 0.4 * u); st.push([dot(col), px, py, s, 0, (0.2 + 0.8 * r() * r()) * (1 - 0.55 * u) + 0.1]); };
-  const bright = (x, y, s, col) => { const sp = r() < 0.5 ? 4 : 6, turn = r() * TAU; st.push([star(col, sp), x, y, s, turn, 0.6 + 0.35 * r()]); tw.push([x, y, s, r() * TAU, 0.6 + 2.2 * r(), turn, sp]); };
+  const bright = (x, y, s, col) => { const sp = r() < 0.5 ? 4 : 6; r(); up.push([star(col, sp), x, y, s, 0.6 + 0.35 * r()]); tw.push([x, y, s, r() * TAU, 0.6 + 2.2 * r(), 0, sp]); };
   const extras = (x, y, R) => {
-    if (r() < 0.035) { const [px, py] = far(x, y, R, tight ? 1.2 : 3); st.push([planet(PLANETS[Math.floor(r() * PLANETS.length)]), px, py, R * (0.05 + 0.1 * r()), r() * TAU, 0.95, true]); }
+    if (r() < 0.035) { const [px, py] = far(x, y, R, tight ? 1.2 : 3); addPlanet(px, py, R * (0.05 + 0.1 * r())); r(); }
     if (r() < 0.03) { const [px, py] = far(x, y, R, tight ? 1.4 : 3.5); st.push([galaxy('#a9c4ff', Math.floor(r() * 3)), px, py, R * (0.2 + 0.25 * r()), r() * TAU, 0.5 + 0.4 * r()]); }
   };
   const near = (x, y, Rs) => { const a = r() * TAU, d = Rs * Math.pow(r(), 0.7); return [x + Math.cos(a) * d, y + Math.sin(a) * d]; };
@@ -93,16 +103,20 @@ export function spaceShape(M, id, line, beads) {
       const [ox, oy] = around(x, y, R * 0.7); st.push([puff(K.b, st.length % 3), ox, oy, R * (0.9 + 0.9 * r()), r() * TAU, 0.35 + 0.3 * r(), true]);
       const [mx, my] = around(x, y, R * 0.4); st.push([puff(K.a, (st.length + 1) % 3), mx, my, R * (0.45 + 0.6 * r()), r() * TAU, 0.4 + 0.4 * r(), true]);
       if (r() < 0.3) { const [wx, wy, u] = far(x, y, R, 2.6); st.push([puff(r() < 0.5 ? K.a : K.b, st.length % 3), wx, wy, R * (0.3 + 0.5 * r()), r() * TAU, 0.3 * (1 - 0.6 * u), true]); }   // outlying wisp
+      // Gas only (v28): the stars, planets and galaxies a nebula used to bring are made and thrown away, so the
+      // clouds of existing drawings stay where they were
+      const k0 = [st.length, tw.length, up.length];
       for (let k = 0, n = Math.floor(r() * r() * 7); k < n; k++) tiny(x, y, R, r() < 0.75 ? '#ffffff' : K.a);
       if (r() < 0.1) { const [sx, sy] = far(x, y, R, 2.5); bright(sx, sy, R * (0.18 + 0.4 * r() * r()), '#dfe9ff'); }
       extras(x, y, R);
+      st.length = k0[0]; tw.length = k0[1]; up.length = k0[2];
     } else if (K.kind === 'dust') {
       st.push([dust(st.length % 3), ...around(x, y, R * 0.4), R * (0.7 + 0.6 * r()), r() * TAU, 0.9, true]);
     } else if (K.kind === 'stars') {
       // Stars stay inside the brush's own width (Rs), whatever the brush size; only their sizes follow R
       for (let k = 0, n = 2 + Math.floor(r() * r() * 10); k < n; k++) { const [px, py] = near(x, y, Rs); st.push([dot(r() < 0.7 ? K.a : K.b), px, py, R * (0.02 + 0.09 * r() * r()), 0, 0.3 + 0.7 * r() * r()]); }
       if (r() < 0.25) { const [sx, sy] = near(x, y, Rs * 0.8); bright(sx, sy, Math.min(R * (0.15 + 0.7 * r() * r() * r()), Rs * 2.2), r() < 0.6 ? K.a : K.b); }
-      if (r() < 0.03) { const [px, py] = near(x, y, Rs); st.push([planet(PLANETS[Math.floor(r() * PLANETS.length)]), px, py, R * (0.05 + 0.08 * r()), r() * TAU, 0.95, true]); }
+      if (r() < 0.06 && K.planets) { const [px, py] = near(x, y, Rs); addPlanet(px, py, R * (0.05 + 0.08 * r())); r(); }
     }
   };
   if (beads) {
@@ -127,14 +141,25 @@ export function spaceShape(M, id, line, beads) {
       next = L[i] + R * 0.34;
       const a = Math.max(i - 1, 0), b = Math.min(i + 1, n - 1), dx = xs[b] - xs[a], dy = ys[b] - ys[a], d = Math.hypot(dx, dy) || 1;
       const off = tight ? 0 : R0 * (0.75 * Math.sin(L[i] * f1 + p1) + 0.4 * Math.sin(L[i] * f2 + p2)), x = xs[i] - dy / d * off, y = ys[i] + dx / d * off;
-      if (K.kind !== 'galaxy' && !tight && Math.sin(L[i] * f3 + p3) < -0.55 && r() < 0.75) { if (r() < 0.5) tiny(x, y, R, '#ffffff'); continue; }   // a thin patch
+      if (K.kind !== 'galaxy' && !tight && Math.sin(L[i] * f3 + p3) < -0.55 && r() < 0.75) { if (r() < 0.5) { tiny(x, y, R, '#ffffff'); if (K.kind === 'nebula') st.pop(); } continue; }   // a thin patch
       if (K.kind === 'galaxy') {
         if (gap <= 0) { st.push([galaxy(K.a, st.length % 3), ...around(x, y, R * 0.5), R * (0.6 + 0.6 * r()), r() * TAU, 1]); gap = 4 + Math.floor(r() * 4); }
         gap--; if (r() < 0.5) tiny(x, y, R * 1.5, '#ffffff');
       } else knot(x, y, R, Math.atan2(dy, dx), w[i] * 1.5);
     }
   }
-  return { paths: { 1: path }, w0: line ? line.w0 : beads[0].r, ink: null, stamps: st, tw: tw.slice(0, 8), drift: dr, noHide: true };
+  return { paths: { 1: path }, w0: line ? line.w0 : beads[0].r, ink: null, stamps: st, up, tw: tw.slice(0, 8), drift: dr, noHide: true };
+}
+// Star spikes all point the same way, whatever the copy's turn (v28): bright stars are kept apart from the other stamps
+// (shape.up: [sprite, x, y, r, alpha]) and drawn upright at each copy's place. The whole picture still turns as one.
+export function drawUpright(c, up) {
+  const m = c.getTransform(), k = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));
+  c.save(); c.globalCompositeOperation = 'lighter';
+  for (const [img, x, y, r, a, over] of up) {
+    const px = m.a * x + m.c * y + m.e, py = m.b * x + m.d * y + m.f, R = r * k;
+    c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = a; c.globalCompositeOperation = over ? 'source-over' : 'lighter'; c.drawImage(img, px - R, py - R, 2 * R, 2 * R);
+  }
+  c.restore();
 }
 export function drawStamps(c, stamps) {
   for (const [img, x, y, r, turn, a, over] of stamps) {
@@ -166,7 +191,10 @@ export function drawTwinkles(X, strokes, hidden, S, maxDrift = 7) {
     const tw = s._shape && s._shape.tw;
     if (!tw || !tw.length || hidden.has(s)) continue;
     forCopies(X, () => {
-      for (let q = 0; q < tw.length && q < maxTw; q++) { const [x, y, r, ph, rate, turn = 0, sp = 4] = tw[q], a = 0.5 + 0.5 * Math.sin(S * rate + ph), k = r * (0.7 + 0.7 * a); X.globalAlpha = 0.15 + 0.75 * a * a; X.save(); X.translate(x, y); X.rotate(turn); X.drawImage(sp === 6 ? flare6 : flare, -k, -k, 2 * k, 2 * k); X.restore(); }
+      const m = X.getTransform(), kk = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));
+      X.save(); X.setTransform(1, 0, 0, 1, 0, 0);
+      for (let q = 0; q < tw.length && q < maxTw; q++) { const [x, y, r, ph, rate, , sp = 4] = tw[q], a = 0.5 + 0.5 * Math.sin(S * rate + ph), k = r * (0.7 + 0.7 * a) * kk, px = m.a * x + m.c * y + m.e, py = m.b * x + m.d * y + m.f; X.globalAlpha = 0.15 + 0.75 * a * a; X.drawImage(sp === 6 ? flare6 : flare, px - k, py - k, 2 * k, 2 * k); }
+      X.restore();
     }, s);
   }
   X.globalCompositeOperation = 'source-over'; X.globalAlpha = 1;
@@ -184,4 +212,27 @@ export function drawSpaceBg(ctx, W, H) {
   }
   const k = Math.max(W, H);
   ctx.drawImage(bg, (W - k) / 2, (H - k) / 2, k, k);
+}
+// Old film over the whole view (Space): grain that jumps about 12 times a second, now and then a scratch or a speck.
+// One pattern fill per frame. Seeded by the frame count, so it is the same film every time. still: reduced motion.
+let grain = null;
+export function drawFilm(ctx, W, H, now, still) {
+  if (!grain) {
+    grain = document.createElement('canvas'); grain.width = grain.height = 256;
+    const g = grain.getContext('2d'), r = mulberry32(1927), im = g.createImageData(256, 256), d = im.data;
+    for (let i = 0; i < d.length; i += 4) { const v = r(), lum = v < 0.5 ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = lum; d[i + 3] = Math.floor(Math.pow(Math.abs(v - 0.5) * 2, 2.2) * 34); }
+    g.putImageData(im, 0, 0);
+  }
+  const f = still ? 0 : Math.floor(now / 83), h = hash32(f, 1927), pat = ctx.createPattern(grain, 'repeat');
+  const sc = Math.max(1, Math.round(Math.max(W, H) / 700));
+  pat.setTransform(new DOMMatrix([sc, 0, 0, sc, h % 256, (h >>> 8) % 256]));
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = pat; ctx.fillRect(0, 0, W, H);
+  if (!still && h % 9 === 0) { ctx.fillStyle = 'rgba(255,250,235,0.16)'; ctx.fillRect((h >>> 4) % W, 0, sc, H); }                                   // a scratch
+  if (!still && h % 13 === 0) { ctx.fillStyle = 'rgba(8,6,4,0.5)'; ctx.beginPath(); ctx.arc((h >>> 6) % W, (h >>> 14) % H, sc * (1.5 + (h % 5)), 0, TAU); ctx.fill(); }   // a speck
+  // a little warmth and falloff toward the edge, like an old print
+  const v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.56);
+  v.addColorStop(0, 'rgba(255,214,170,0.035)'); v.addColorStop(1, 'rgba(0,0,0,0.3)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
 }

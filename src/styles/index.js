@@ -16,10 +16,11 @@ import { nodes } from './signal.js';
 import { screentone, brushInk } from './comic.js';
 import { solids, lineMats, underMats } from './signal.js';
 import { microMats } from './micro.js';
+import { clay, glass } from './realistic.js';
 
 // New materials are only ever appended: a stroke stores its material as an index into this list (clips depend on it)
 export const MATS = [liquidMetal, ...creams, ...comics, comicCloud, inkHatch, ...drips, softCloud, slimeMat, flowerVine,
-  ...pixels, ...shapes, ...neons, ...sprays, ...flats, ...glyphMats, ...plants, ...signals, ...spaceMats, pop, nodes, screentone, brushInk, solids, ...lineMats, ...underMats, ...microMats];
+  ...pixels, ...shapes, ...neons, ...sprays, ...flats, ...glyphMats, ...plants, ...signals, ...spaceMats, pop, nodes, screentone, brushInk, solids, ...lineMats, ...underMats, ...microMats, clay, glass];
 export const matIndex = name => { const i = MATS.findIndex(m => m.name === name); if (i < 0) throw new Error('No material ' + name); return i; };
 for (const M of MATS) { M.ops = M.make();
   // Moving strokes are redrawn every frame, so they use crisp layers instead of the costly blurred ones

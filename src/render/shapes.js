@@ -98,7 +98,8 @@ export function extraPieces(s, kind, xs, ys, nx, ny, w, L, n, w0) {
     // own load is used up, falls where the hand moved fast, and wanders with a noise that never repeats; the hair's
     // width follows it, so hairs thin to a point as they run out instead of stopping in blocks (v27: at small sizes
     // the old on/off dashes all came out the same length). Slow strokes come out full, fast ones dry and streaky.
-    const B = out.br = new Path2D(), nb = 24, len = L[n - 1] || 1e-6, step = Math.max(1, Math.floor(n / 90)), sp = s._sp, seed = hash32(s.id, 5);
+    // Hairs are one size whatever the brush: a bigger brush has more of them (v28), about 24 at the default size
+    const B = out.br = new Path2D(), nb = Math.round(Math.min(72, Math.max(6, w0 / 0.00115))), len = L[n - 1] || 1e-6, step = Math.max(1, Math.floor(n / 90)), sp = s._sp, seed = hash32(s.id, 5);
     const vn = (x, k) => { const q = Math.floor(x), f = x - q, t = f * f * (3 - 2 * f), a = hash32(seed, k, q) % 1024 / 1024, b = hash32(seed, k, q + 1) % 1024 / 1024; return a + (b - a) * t; };
     const grain = Math.max(w0 * 2.5, 0.022);   // how long the wet and dry runs are; never shorter than this on thin brushes
     for (let b = 0; b < nb; b++) {

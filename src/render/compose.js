@@ -7,7 +7,8 @@ import { relayout } from '../core/layout.js';
 import { SQ3, TAU, clamp, mod } from '../core/math.js';
 import { anim, hiddenChanged, rebuild, stepRandomize } from '../core/settings.js';
 import { score } from '../core/state.js';
-import { BEAD_R, NEON_W } from '../core/stroke.js';
+import { BEAD_R, NEON_W, prepare } from '../core/stroke.js';
+import { drawUpright } from './space.js';
 import { TOOL } from '../core/tools.js';
 import { beatAt, rotAt, scrollAt, visNow } from '../core/transport.js';
 import { composeRot, drawShape, setComposeRot } from './ops.js';
@@ -19,7 +20,7 @@ import { GCELL, glyphCells, glyphShape, lineSamples } from './glyphs.js';
 import { stampPts, stampShape } from './stamps.js';
 import { drawLive, liveFrame } from './glitchfx.js';
 import { pulseFrame } from '../sound/pulse.js';
-import { drawSpaceBg, drawTwinkles } from './space.js';
+import { drawFilm, drawSpaceBg, drawTwinkles } from './space.js';
 import { drawMicroBg, drawPaperBg } from './micro.js';
 
 export const cv = $('cv'), ctx = cv.getContext('2d');
@@ -74,6 +75,47 @@ export const setNorm = c => c.setTransform(geo.R, 0, 0, geo.R, geo.W / 2, geo.H 
 export const bloomW = s => 0.016 + 0.022 * Math.sqrt(s._sz);
 export function drawUnit(c, u) {
   drawShape(c, u.shape, opsOf(u.list[0]));
+}
+// ----- Sprites (v28). In styles marked render.sprites (unlit, or lit with the light fixed to the stroke), a still
+// stroke is drawn once into a spare canvas and that picture is pasted for every copy, instead of running the whole
+// recipe per copy. Nothing is kept: the spare is reused for the next stroke, so it costs no memory to speak of, and a
+// full redraw is one recipe per stroke plus pastes. Pasted pictures are turned and resampled, so they are very
+// slightly softer than fresh drawing. Tests (syncDraw) and other styles draw every copy fresh, as before.
+const SPR = { c: document.createElement('canvas'), owner: null }, PRE = { c: document.createElement('canvas'), owner: null };
+SPR.x = SPR.c.getContext('2d'); PRE.x = PRE.c.getContext('2d');
+const useSprite = s => !syncDraw && world().render.sprites && s._shape && s._bb && !MATS[s.color].live;
+function renderSprite(S, s, k) {
+  const b = s._bb, w = Math.ceil((b[2] - b[0]) * k) + 2, h = Math.ceil((b[3] - b[1]) * k) + 2;
+  if (w * h > 6e6 || w > 4096 || h > 4096) return null;
+  const key = s.id + ':' + s.pts.length + ':' + k.toFixed(3) + ':' + (s.tint || '') + s.color;
+  if (S.owner !== key || S.w !== w || S.h !== h) {
+    if (S.c.width < w) S.c.width = w;
+    if (S.c.height < h) S.c.height = h;
+    S.x.setTransform(1, 0, 0, 1, 0, 0); S.x.globalAlpha = 1; S.x.globalCompositeOperation = 'source-over'; S.x.clearRect(0, 0, S.c.width, S.c.height);
+    S.x.setTransform(k, 0, 0, k, 1 - b[0] * k, 1 - b[1] * k);
+    const saved = composeRot;
+    setComposeRot(0);   // the light sits in the stroke's own space, so every copy carries its own (as in a real kaleidoscope)
+    S.x.sprite = true;
+    drawShape(S.x, s._shape, opsOf(s));
+    setComposeRot(saved);
+    S.owner = key; S.w = w; S.h = h;
+  }
+  return S;
+}
+// Draw copies from..to-1 of a still stroke into a layer (c is already in the layer's drawing space). Returns the number of copies.
+function drawCopies(c, s, from, to, S = SPR) {
+  if (useSprite(s)) {
+    const m = c.getTransform(), k = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) * fs(), sp = renderSprite(S, s, k);
+    if (sp) {
+      const b = s._bb;
+      c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+      const total = forCopies(c, () => c.drawImage(sp.c, 0, 0, sp.w, sp.h, b[0] - 1 / k, b[1] - 1 / k, sp.w / k, sp.h / k), s, from, to);
+      // pieces that must stay upright whatever the copy's turn (Space: star spikes), drawn straight into the layer
+      if (s._shape.up && s._shape.up.length) forCopies(c, () => drawUpright(c, s._shape.up), s, from, to);
+      return total;
+    }
+  }
+  return forCopies(c, () => { drawShape(c, s._shape, opsOf(s)); if (s._shape.up) drawUpright(c, s._shape.up); }, s, from, to);
 }
 // Still: drawn once into a cached layer. Moving tools (Loop, Ripple) and live materials (Glitch) are drawn every frame.
 const isStill = s => TOOL[s.tool].kind === 'static' && !MATS[s.color].live;
@@ -176,7 +218,7 @@ export function stepRelight(now) {
         R.cur = { canvas: c, x }; R.items.push(R.cur);
       }
       const ops = MATS[it.color].cost + (it.shape.stamps ? it.shape.stamps.length / 6 : 0);
-      forCopies(R.cur.x, () => { drawUnit(R.cur.x, it); cost += ops; }, it);
+      cost += drawCopies(R.cur.x, it.list[0]) * (useSprite(it.list[0]) ? 2 : ops);
       if (R.build) for (const s of it.list) glowOf(R.g, s);
     } else { R.cur = null; R.items.push({ s: it.s }); }
   }
@@ -260,7 +302,7 @@ function stepAppend(first) {
   const saved = composeRot;
   setComposeRot(litRot);
   frameNorm(p.top.x, p.top.canvas);
-  const n = syncDraw ? 1e9 : p.n, total = forCopies(p.top.x, () => drawShape(p.top.x, s._shape, opsOf(s)), s, p.next, p.next + n);
+  const n = syncDraw ? 1e9 : p.n, total = drawCopies(p.top.x, s, p.next, p.next + n);
   p.next += n;
   setComposeRot(saved);
   if (p.next >= total) { pending.shift(); if (pending.length) pending[0].n = 1; }
@@ -283,7 +325,7 @@ export function renderGroups(rot = 0) {
         cur = { canvas: c, x };
         ITEMS.push(cur);
       }
-      forCopies(cur.x, () => drawUnit(cur.x, it), it);
+      drawCopies(cur.x, it.list[0]);
     } else { cur = null; ITEMS.push({ s: it.s }); }
   }
   gsctx.setTransform(1, 0, 0, 1, 0, 0); gsctx.clearRect(0, 0, glowS.width, glowS.height);
@@ -330,7 +372,7 @@ export function drawAnim(X, s, S, B) {
   forCopies(X, () => drawShape(X, body, M.animOps), s);
   return centerPath(rx, ry, 0, n - 1, 4);
 }
-export function drawPreview(X) {
+export function drawPreview(X, S, B, now) {
   if (cur && cur.stamp) {
     // A stamp being placed: the real shape, a little see-through, in every copy
     const sh = stampShape(cur.stamp, stampPts(cur.stamp, cur.cx, cur.cy, cur.r, cur.rot)), r = cur.r + 0.03;
@@ -340,18 +382,31 @@ export function drawPreview(X) {
     return;
   }
   if (!cur || cur.pts.length < 2) return;
-  const path = new Path2D(), M = MATS[cur.color], sz = cur.size, bb = [1e9, 1e9, -1e9, -1e9];
+  const M = MATS[cur.color], sz = cur.size;
+  // Where it is cheap, the mark shows in its finished style as you draw: the stroke so far is prepared afresh whenever
+  // a point is added, then drawn once (Glitch) or pasted from a sprite (sprite styles). Its id is already the one the
+  // finished stroke will have, so seeded details do not jump when you lift.
+  if (M.live || world().render.sprites || world().render.preview) {
+    if (cur._pvN !== cur.pts.length) {
+      const t = { id: cur.sid, tool: 'glow', color: cur.color, tint: cur.tint, size: sz, fx: score.fx, pt: cur.pt, pts: cur.pts };
+      prepare(t); cur._pv = t; cur._pvN = cur.pts.length;
+    }
+    const t = cur._pv;
+    if (M.live) { drawLive(X, t, S, B, now, NOPULSE); return; }
+    if (t._shape) { drawCopies(X, t, 0, Infinity, PRE); return; }
+  }
+  // Otherwise a plain line in the colour in hand
+  const path = new Path2D(), bb = [1e9, 1e9, -1e9, -1e9];
   path.moveTo(cur.pts[0][0], cur.pts[0][1]);
   for (const q of cur.pts) { path.lineTo(q[0], q[1]); bb[0] = Math.min(bb[0], q[0]); bb[1] = Math.min(bb[1], q[1]); bb[2] = Math.max(bb[2], q[0]); bb[3] = Math.max(bb[3], q[1]); }
   const bm = 0.015 * sz + 0.03; bb[0] -= bm; bb[1] -= bm; bb[2] += bm; bb[3] += bm;
-  X.lineCap = 'round'; X.lineJoin = 'round';
-  forCopies(X, () => {
-    const ac = colorOf(cur);
-    if (cur.tool === 'beads') { X.lineWidth = BEAD_R * 4 * sz; X.strokeStyle = ac; X.stroke(path); }
-    else { X.lineWidth = NEON_W * 2 * sz; X.strokeStyle = ac; X.stroke(path); X.lineWidth = NEON_W * 0.72 * sz; X.strokeStyle = cur.tint ? '#ffffff' : M.light; X.stroke(path); }
-  }, { _bb: bb });
+  X.lineCap = 'round'; X.lineJoin = 'round'; X.strokeStyle = colorOf(cur);
+  X.lineWidth = (cur.tool === 'beads' ? BEAD_R * 4 : NEON_W * 2) * sz;
+  forCopies(X, () => X.stroke(path), { _bb: bb });
 }
+const NOPULSE = { drum: 0, by: new Map() };
 export function drawGuides(B, rot) {
+  if (world().render.bg === 'paper') return;   // plain paper: no fold or tile lines (they read as seams)
   const m = score.mode, ext = Math.hypot(geo.W, geo.H) / 2 / geo.R + 0.05;
   ctx.strokeStyle = world().render.bg ? 'rgba(70,60,100,0.14)' : '#1c2132'; ctx.lineWidth = 0.003; ctx.beginPath();
   if (m === 'kaleido' && score.spiral < 0.04) {
@@ -446,7 +501,7 @@ export function frame(now) {
   }
   if (world().render.twinkle && !reduceMotion.matches) { frameNorm(fctx, fb); drawTwinkles(fctx, score.strokes, HIDDEN, S, score.mode === 'free' ? 7 : 0); }
   frameNorm(fctx, fb);
-  drawPreview(fctx);
+  drawPreview(fctx, S, B, now);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, W, H);
   setNorm(ctx);
   ctx.save();
@@ -460,6 +515,7 @@ export function frame(now) {
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   blitPicture(ctx, W, H, B, rot, cd, true);
+  if (world().render.film) drawFilm(ctx, W, H, now, reduceMotion.matches);
   ctx.restore();
   setNorm(ctx);
   if (!geo.wide) { ctx.strokeStyle = '#262b3e'; ctx.lineWidth = 0.004; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.stroke(); }

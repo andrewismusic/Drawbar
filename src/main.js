@@ -26,7 +26,7 @@ initControls();
 rearrange();
 {
   let pend = 0;
-  const ro = new ResizeObserver(() => { if (!pend) pend = requestAnimationFrame(() => { pend = 0; layout(); }); });
+  const ro = new ResizeObserver(() => { if (!pend) pend = requestAnimationFrame(() => { pend = 0; layout(); const p = $('pager'); p.scrollLeft = (+p.dataset.i || 0) * p.clientWidth; }); });
   for (const id of ['main', 'panel']) ro.observe($(id));
 }
 // Reopen the style tab used last time

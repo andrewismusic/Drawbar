@@ -21,12 +21,6 @@
       <button id="dice" class="icon" aria-label="Randomize" title="Randomize">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="8.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/></svg>
       </button>
-      <div id="bpm" class="bpm" role="slider" tabindex="0" aria-label="Tempo" aria-valuemin="40" aria-valuemax="180" aria-valuenow="92" title="Drag up or down to change tempo"><span id="bpmVal">92</span><small>BPM</small></div>
-      <div class="seg mini" id="timeSeg" role="group" aria-label="Loop timing">
-        <button id="timeC" data-v="clocked" aria-label="Clocked loops" title="Clocked loops"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21h10L14 4h-4z"/><path d="M12 16l6-9"/><path d="M9.2 17h5.6"/></svg></button>
-        <button id="timeH" data-v="hand" aria-label="Hand-drawn loop lengths" title="Hand-drawn loop lengths"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15c3-6 5 4 8-2s5 3 7-1c1-2 2-3 3-3"/></svg></button>
-      </div>
-      <button id="soundBtn" class="icon toggle" aria-pressed="false" aria-expanded="false" aria-controls="knobRow" aria-label="Sound controls" title="Sound controls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.8 7.8 0 0 1 0 11"/></svg></button>
     </div>
     <div class="cluster" role="group" aria-label="Edit">
       <button id="undoBtn" class="icon" aria-label="Undo" title="Undo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
@@ -46,17 +40,8 @@
       <div class="stage" id="stage"><canvas id="cv" aria-label="Drawing canvas. Draw to change the music."></canvas></div>
     </div>
 
-    <aside class="panel" id="panel" aria-label="Drawing controls">
-      <section class="group drawgroup">
-        <h2>Draw</h2>
-        <div class="drawrow" id="drawRow"><div class="tools" id="tools"></div>
-          <div class="stylewrap">
-            <button id="styleBtn" class="stylebtn" aria-haspopup="true" aria-expanded="false" aria-controls="worldTabs" title="Style"><span id="styleName">Comic</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10l5 5 5-5"/></svg></button>
-            <nav class="worlds" id="worldTabs" role="tablist" aria-label="Styles" hidden></nav>
-          </div>
-<div class="sizedot" id="sizeBar" role="slider" tabindex="0" aria-label="Brush size" aria-valuemin="0" aria-valuemax="100" title="Size: drag up or down"><canvas id="sizeCv"></canvas></div></div>
-      </section>
-      <section class="group">
+    <aside class="panel" id="panel" aria-label="Controls">
+      <section class="group pattern">
         <h2>Pattern<span class="mname" id="modeName"></span></h2>
         <div class="prow" id="paramRow">
           <div class="seg modes" id="modeSeg" role="group" aria-label="Pattern type"></div>
@@ -66,9 +51,33 @@
           <div class="kwrap"><button id="mirrorBtn" class="icon toggle round" aria-pressed="true" aria-label="Mirror"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3v18" stroke-dasharray="2 2.4"/><path d="M9.5 7L4 17h5.5z" fill="currentColor"/><path d="M14.5 7L20 17h-5.5z"/></svg></button><span class="kl">Mirror</span></div>
         </div>
       </section>
+      <div class="seg pageseg" id="pageSeg" role="group" aria-label="Controls shown"><button data-v="0" aria-pressed="true">Draw</button><button data-v="1" aria-pressed="false">Sound</button></div>
+      <div class="pager" id="pager">
+        <div class="page" id="pageDraw">
+      <section class="group drawgroup">
+        <h2>Draw</h2>
+        <div class="drawrow" id="drawRow"><div class="tools" id="tools"></div>
+          <div class="stylewrap">
+            <button id="styleBtn" class="stylebtn" aria-haspopup="true" aria-expanded="false" aria-controls="worldTabs" title="Style"><span id="styleName">Comic</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10l5 5 5-5"/></svg></button>
+            <nav class="worlds" id="worldTabs" role="tablist" aria-label="Styles" hidden></nav>
+          </div>
+<div class="sizedot" id="sizeBar" role="slider" tabindex="0" aria-label="Brush size" aria-valuemin="0" aria-valuemax="100" title="Size: drag up or down"><canvas id="sizeCv"></canvas></div></div>
+      </section>
       <section class="group" id="fxGroup" hidden>
         <h2>Effect</h2>
         <div class="seg fx" id="fxSeg" role="group" aria-label="Effect"><button data-v="smear">Smear</button><button data-v="jitter">Jitter</button></div>
+      </section>
+      <section class="group" id="optGroup" hidden>
+        <h2>Points</h2>
+        <div class="row">
+          <div class="seg mini" id="ptShape" role="group" aria-label="Point shape">
+            <button data-v="square" aria-label="Squares" title="Squares"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" fill="currentColor"/></svg></button>
+            <button data-v="circle" aria-label="Circles" title="Circles"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5" fill="currentColor"/></svg></button>
+            <button data-v="triangle" aria-label="Triangles" title="Triangles"><svg viewBox="0 0 24 24"><path d="M12 5l7.5 13h-15z" fill="currentColor"/></svg></button>
+            <button data-v="plus" aria-label="Plus signs" title="Plus signs"><svg viewBox="0 0 24 24"><path d="M10 4h4v6h6v4h-6v6h-4v-6H4v-4h6z" fill="currentColor"/></svg></button>
+          </div>
+          <div class="kwrap"><div class="kn" id="ptVary" role="slider" tabindex="0" aria-label="Size variety" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Variety</span></div>
+        </div>
       </section>
       <section class="group">
         <h2 id="matLabel">Material</h2>
@@ -78,6 +87,25 @@
         <h2>Color</h2>
         <div class="swatches" id="colors"></div>
       </section>
+        </div>
+        <div class="page" id="pageSound">
+      <section class="knobs sound" id="knobRow" aria-label="Sound controls: these change the music only, not the drawing" title="These change the music only, not the drawing">
+        <div class="kwrap big"><div class="kn big" id="knDensity" role="slider" tabindex="0" aria-label="Density" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Density</span></div>
+        <div class="kwrap big"><div class="kn big" id="knProb" role="slider" tabindex="0" aria-label="Probability" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Probability</span></div>
+        <div class="kwrap big"><div class="kn big" id="knSpace" role="slider" tabindex="0" aria-label="Space" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Space</span></div>
+        <div class="kwrap big"><div class="kn big" id="knTone" role="slider" tabindex="0" aria-label="Tone" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Tone</span></div>
+      </section>
+        <div class="soundrow">
+          <div id="bpm" class="bpm" role="slider" tabindex="0" aria-label="Tempo" aria-valuemin="40" aria-valuemax="180" aria-valuenow="92" title="Drag up or down to change tempo"><span id="bpmVal">92</span><small>BPM</small></div>
+          <div class="seg mini" id="timeSeg" role="group" aria-label="Loop timing">
+        <button id="timeC" data-v="clocked" aria-label="Clocked loops" title="Clocked loops"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21h10L14 4h-4z"/><path d="M12 16l6-9"/><path d="M9.2 17h5.6"/></svg></button>
+        <button id="timeH" data-v="hand" aria-label="Hand-drawn loop lengths" title="Hand-drawn loop lengths"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15c3-6 5 4 8-2s5 3 7-1c1-2 2-3 3-3"/></svg></button>
+          </div>
+          <select id="keySel" class="pick" aria-label="Key"><option value="0">C</option><option value="1">C♯</option><option value="2">D</option><option value="3">E♭</option><option value="4">E</option><option value="5">F</option><option value="6">F♯</option><option value="7">G</option><option value="8">A♭</option><option value="9">A</option><option value="10">B♭</option><option value="11">B</option></select>
+          <select id="scaleSel" class="pick" aria-label="Scale"><option value="0">Major</option><option value="1">Minor</option><option value="2">Dorian</option><option value="3">Phrygian</option><option value="4">Lydian</option><option value="5">Mixolydian</option><option value="6">Harmonic minor</option><option value="7">Major pentatonic</option><option value="8">Minor pentatonic</option><option value="9">Hirajoshi</option><option value="10">Whole tone</option></select>
+        </div>
+        </div>
+      </div>
     </aside>
   </div>
 
@@ -87,16 +115,6 @@
     <div class="clipgrid" id="clipGrid"></div>
   </section>
 </div>
-      <section class="knobs sound sheet" id="knobRow" hidden aria-label="Sound controls: these change the music only, not the drawing" title="These change the music only, not the drawing">
-        <div class="slab" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18V6L7.5 9.5z" fill="currentColor"/><path d="M15.5 9a4.2 4.2 0 0 1 0 6"/><path d="M18 6.5a7.8 7.8 0 0 1 0 11"/></svg><span>Sound</span></div>
-        <div class="kwrap big"><div class="kn big" id="knDensity" role="slider" tabindex="0" aria-label="Density" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Density</span></div>
-        <div class="kwrap big"><div class="kn big" id="knProb" role="slider" tabindex="0" aria-label="Probability" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Probability</span></div>
-        <div class="kwrap big"><div class="kn big" id="knSpace" role="slider" tabindex="0" aria-label="Space" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Space</span></div>
-        <div class="kwrap big"><div class="kn big" id="knTone" role="slider" tabindex="0" aria-label="Tone" aria-valuemin="0" aria-valuemax="100"></div><span class="kl">Tone</span></div>
-        <div class="srow2">
-          <button id="soundClose" class="icon" aria-label="Close sound controls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        </div>
-      </section>
 <div class="recpill" id="recPill" hidden><i class="dot"></i><span id="recTime">0:00</span><button id="recStop">Stop</button></div>
 
 <div class="settings" id="settings" role="dialog" aria-label="Preferences" hidden>

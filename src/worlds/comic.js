@@ -10,7 +10,7 @@ export default {
   colors: ['#ee3b3f', '#ff8a1f', '#ffcb2b', '#3ccf6e', '#3ea4ea', '#9b6bff', '#ff6fb5', '#f4efe2', '#15151c'],
   tools: ['glow', 'erase'],
   modes: ['free', 'kaleido', 'tiles'],
-  limits: { copies: 6, tiles: 4, turns: 3, rotate: true },
+  limits: { strokes: 30, copies: 6, tiles: 4, turns: 3, rotate: true },
   start: { mode: 'kaleido', copies: 6, spiral: 0, tiles: 4, turns: 1, mirror: true, fscale: 50, frot: false, fmirror: false, tool: 'glow', color: 'Comic red' },
-  render: { fixedLight: true },
+  render: { fixedLight: true, sprites: true },
 };

@@ -135,6 +135,7 @@ export function prepare(s) {
       s._shape = buildShape(caps, circ, M.ks, w0 * 0.9, inkT, inkCaps);
       if (M.extra) Object.assign(s._shape.paths, extraPieces(s, M.extra, xs, ys, nx, ny, w, L, n, w0));
       if (M.puffs) s._shape.w0 = w0 * 0.75;
+      if (M.clear) s._shape.noHide = true;   // see-through: covers nothing
       if (M.extra === 'bristle') s._shape.noHide = true;   // a dry brush covers nothing fully
     }
   } else {

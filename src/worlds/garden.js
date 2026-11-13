@@ -6,7 +6,7 @@ export default {
   mats: ['Glowcaps', 'Bellcaps', 'Trumpets', 'Puffballs', 'Spirals', 'Starbloom', 'Moonberries', 'Lanterns'],
   tools: ['glow', 'erase'],
   modes: ['free', 'kaleido', 'tiles'],
-  limits: { copies: 6, tiles: 4, turns: 3, rotate: true },   // no 6-turn hex tiling: ~300 ms to redraw with the film grain
+  limits: { strokes: 24, copies: 6, tiles: 4, turns: 3, rotate: true },   // no 6-turn hex tiling: ~300 ms to redraw with the film grain
   start: { mode: 'free', copies: 4, spiral: 0, tiles: 3, turns: 1, mirror: true, fscale: 50, frot: false, fmirror: false, tool: 'glow', color: 'Glowcaps' },
-  render: {},
+  render: { sprites: true },
 };

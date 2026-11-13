@@ -6,6 +6,7 @@
 // Free mode is in every world: it draws each stroke once (twice with mirror), the cheapest pattern.
 import { score, ui } from '../core/state.js';
 import { PALETTE, matIndex } from '../styles/index.js';
+import { toRgb } from '../core/color.js';
 import classic from './classic.js';
 import materials from './materials.js';
 import comic from './comic.js';
@@ -26,3 +27,5 @@ export const world = () => WORLD[score.world] || classic;
 export const pixelScale = () => world().options && world().options.pixel && score.pixel ? 4 : 0;
 // The colour in hand: the colour picker's where the tab has one (colors), else the material's own
 export const ink = () => world().colors ? ui.tint : PALETTE[ui.color];
+// The same, unless it is too dark to see on the dark panel (knob rings, pressed buttons)
+export const accent = () => { const c = ink(), [r, g, b] = toRgb(c); return r * 0.3 + g * 0.59 + b * 0.11 < 60 ? '#ece8dc' : c; };

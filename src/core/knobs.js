@@ -7,7 +7,7 @@ import { MIX_DEF, checkpoint, mix, prefs, savePrefs, score, ui } from './state.j
 import { syncUI } from './ui.js';
 import { redrawSoon } from '../render/compose.js';
 import { applySpace, applyTone, applyVolumes } from '../sound/graph.js';
-import { ink, world } from '../worlds/index.js';
+import { accent, world } from '../worlds/index.js';
 
 export function ringPath(f0, f1) {
   const n = Math.max(2, Math.ceil((f1 - f0) * 60)), r = 17, out = [], inn = [];
@@ -28,14 +28,18 @@ export function knob(el, o) {
   const isInt = () => typeof o.int === 'function' ? o.int() : !!o.int, pxOf = () => typeof o.px === 'function' ? o.px() : o.px;
   const k = {
     draw() {
-      const [lo, hi] = o.range(), v = o.get(), f = clamp((v - lo) / (hi - lo), 0, 1);
+      const [lo, hi] = o.range(), v = o.get();
+      // smooth: the ring follows the finger, not the steps (so a knob with three settings looks like any other)
+      if (pos == null || (isInt() ? Math.round(pos) !== v : Math.abs(pos - v) > 1e-6)) pos = v;
+      const f = clamp(((o.smooth ? clamp(pos, lo, hi) : v) - lo) / ((hi - lo) || 1), 0, 1);
       const rp = ringPath(0, Math.max(f, 0.001));
       kp.setAttribute('d', rp.d); kc.setAttribute('cx', rp.cx); kc.setAttribute('cy', rp.cy); kc.setAttribute('r', rp.cr);
       ka.setAttribute('fill', o.color ? o.color(v) : '#ece8dc');
-      kv.textContent = o.fmt(v);
+      kv.textContent = o.plain ? '' : o.fmt(v);
       el.setAttribute('aria-valuenow', o.fmt(v));
     },
   };
+  let pos = null;
   const put = v => {
     const [lo, hi] = o.range();
     v = clamp(v, lo, hi);
@@ -51,7 +55,7 @@ export function knob(el, o) {
     if (!drag) return;
     const [lo, hi] = o.range(), nv = drag.v + ((e.clientX - drag.x) - (e.clientY - drag.y)) * (hi - lo) / pxOf();
     if (!drag.started && (isInt() ? Math.round(nv) !== drag.v : Math.abs(nv - drag.v) > 0.004)) { drag.started = true; o.onStart && o.onStart(); }
-    if (drag.started) put(nv);
+    if (drag.started) { pos = nv; put(nv); if (o.smooth) k.draw(); }
   });
   const end = () => { if (drag) { if (drag.started) o.onEnd && o.onEnd(); drag = null; } };
   el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
@@ -90,24 +94,26 @@ export function initKnobs() {
     fmt: v => Math.round(v), color: () => '#ece8dc',
   });
   pk1 = knob($('pk1'), {
-    range: () => capped(pm(), P1[pm()][0], P1[pm()].slice(1, 3)), int: true, px: () => pm() === 'kaleido' ? 140 : pm() === 'free' ? 220 : 90, def: () => pm() === 'free' ? 50 : world().start[P1[pm()][0]],
+    range: () => capped(pm(), P1[pm()][0], P1[pm()].slice(1, 3)), smooth: true, plain: true, int: true, px: () => pm() === 'kaleido' ? 140 : pm() === 'free' ? 220 : 90, def: () => pm() === 'free' ? 50 : world().start[P1[pm()][0]],
     get: () => score[P1[pm()][0]],
     set: v => { score[P1[pm()][0]] = v; redrawSoon(); },
     fmt: v => P1[pm()][4](v),
-    color: ink, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
+    color: accent, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
   });
   pk2 = knob($('pk2'), {
-    range: () => capped(pm(), P2[pm()][0], P2[pm()].slice(1, 3)), int: () => P2[pm()][5], px: () => pm() === 'kaleido' ? 160 : 90, def: () => pm() === 'kaleido' ? 0 : world().start.turns,
+    range: () => capped(pm(), P2[pm()][0], P2[pm()].slice(1, 3)), smooth: true, plain: true, int: () => P2[pm()][5], px: () => pm() === 'kaleido' ? 160 : 90, def: () => pm() === 'kaleido' ? 0 : world().start.turns,
     get: () => score[P2[pm()][0]],
     set: v => { score[P2[pm()][0]] = P2[pm()][5] ? v : Math.round(v * 100) / 100; redrawSoon(); },
     fmt: v => P2[pm()][4](v),
-    color: ink, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
+    color: accent, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
   });
+  // Points brush (Glitch): how much the points' sizes vary
+  knob($('ptVary'), { range: () => [0, 100], smooth: true, plain: true, int: true, px: 150, def: () => 50, get: () => ui.pt.vary, set: v => { ui.pt.vary = v; }, fmt: v => Math.round(v), color: accent });
   // Size in kaleidoscope and tiles (in free mode the first knob is Size)
   pk3 = knob($('pk3'), {
-    range: () => [0, 100], int: true, px: 220, def: () => 50,
+    range: () => [0, 100], smooth: true, plain: true, int: true, px: 220, def: () => 50,
     get: () => score.fscale, set: v => { score.fscale = v; redrawSoon(); },
     fmt: v => Math.round(v),
-    color: ink, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
+    color: accent, onStart: checkpoint, onEnd: () => { rebuild(); syncUI(); },
   });
 }

@@ -25,11 +25,23 @@ body{
 .app{box-sizing:border-box; height:100%; display:flex; flex-direction:column; gap:10px; padding-block:10px}
 .main{flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px}
 .left{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; width:100%; min-width:0}
-.panel{width:100%; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px 22px; min-width:0}
+.panel{width:100%; display:flex; flex-direction:column; align-items:center; gap:8px; min-width:0}
+/* The bottom pane: the pattern row stays put; under it, two pages side by side (Draw, Sound). Swipe sideways or use the toggle. */
+.pageseg{padding:2px; gap:2px}
+.pageseg button{min-height:26px; padding:0 14px; font-size:12px}
+.pager{display:flex; width:100%; overflow-x:auto; overflow-y:hidden; scroll-snap-type:x mandatory; scrollbar-width:none; overscroll-behavior-x:contain}
+.pager::-webkit-scrollbar{display:none}
+.page{flex:0 0 100%; min-width:0; scroll-snap-align:start; scroll-snap-stop:always; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; align-content:flex-start; gap:10px 22px; box-sizing:border-box; padding:2px 0}
+.kn, .bpm, .sizedot{touch-action:none}
+.soundrow{display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:8px; width:100%}
+.pick{font:inherit; font-weight:600; color:var(--fg); background:var(--raise); border:1px solid var(--line); border-radius:8px; height:40px; padding:0 8px; max-width:150px}
 @media (min-width:880px) and (min-aspect-ratio:5/4){
   .main{flex-direction:row; gap:28px}
   .left{flex:1; height:100%}
-  .panel{width:304px; flex:none; flex-direction:column; flex-wrap:nowrap; align-items:stretch; gap:18px}
+  .panel{width:304px; flex:none; align-items:stretch; gap:12px}
+  .pageseg{align-self:center}
+  .page{flex-direction:column; flex-wrap:nowrap; align-items:stretch; justify-content:flex-start; gap:16px}
+  .page .knobs.sound{gap:4px; padding:8px 4px} .page .kwrap.big{width:68px}
 }
 
 /* Visual only: the drawing and nothing else, filling the screen. Tap to come back. */
@@ -95,7 +107,7 @@ button:disabled{opacity:.35; cursor:default}
 .stylebtn{display:inline-flex; align-items:center; gap:4px; padding:0 10px 0 16px; white-space:nowrap; min-height:54px; border-radius:27px; font-size:15px}
 .stylebtn svg{width:16px; height:16px; color:var(--muted)}
 .stylebtn[aria-expanded="true"]{border-color:var(--ink)}
-.worlds{position:absolute; left:50%; transform:translateX(-50%); bottom:calc(100% + 6px); max-height:60vh; overflow-y:auto; z-index:40; display:flex; flex-direction:column; gap:2px; min-width:150px; padding:6px; background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 40px var(--shadow)}
+.worlds{position:fixed; max-height:60vh; overflow-y:auto; z-index:40; display:flex; flex-direction:column; gap:2px; min-width:150px; padding:6px; background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 40px var(--shadow)}
 .worlds button{min-height:38px; padding:0 14px; border-radius:8px; background:transparent; border-color:transparent; color:var(--muted); font-size:14px; text-align:left}
 .worlds button:hover{color:var(--fg)}
 .worlds button[aria-selected="true"]{color:var(--bg); background:var(--fg); border-color:var(--fg)}
@@ -147,10 +159,6 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .knobs{display:flex; justify-content:center; align-items:flex-start; gap:clamp(18px, 5vw, 44px); flex:none}
 /* The four knobs shape the music only: a labelled, outlined group with a speaker, set apart from the drawing controls */
 .knobs.sound{align-items:center; gap:clamp(10px, 3.4vw, 30px); padding:6px 16px 5px 12px; border:1px solid var(--line); border-radius:14px; background:var(--panel)}
-/* Sound sheet: put away until the Sound button is pressed; then it lies over the bottom of the controls, clear of the drawing */
-.knobs.sound.sheet{position:fixed; z-index:35; left:50%; transform:translateX(-50%); bottom:calc(10px + env(safe-area-inset-bottom, 0px)); width:max-content; max-width:calc(100vw - 20px); box-sizing:border-box; flex-wrap:wrap; row-gap:8px; padding:10px 14px 8px; box-shadow:0 14px 40px var(--shadow)}
-.sheet .srow2{display:flex; align-items:center}
-@media (min-width:880px) and (min-aspect-ratio:5/4){ .knobs.sound.sheet{left:auto; transform:none; right:max(16px, env(safe-area-inset-right, 0px)); width:304px; gap:4px; padding:10px 8px 8px} .knobs.sheet .slab{display:none} .knobs.sheet .kwrap.big{width:68px} }
 .knobs .slab{display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.14em; text-transform:uppercase}
 .knobs .slab svg{width:22px; height:22px}
 .kwrap{display:flex; flex-direction:column; align-items:center; gap:3px}
@@ -275,3 +283,11 @@ input[type=range]::-moz-range-thumb{width:24px; height:24px; border-radius:50%; 
 .sw.fxsw, .sw.fxsw::after{border-radius:7px}
 .sw.fxsw::after{inset:3px; border-radius:4px}
 .sw.fxfirst::before{content:""; position:absolute; left:-5px; top:1px; bottom:1px; width:1px; background:#3a4160}
+/* Very short screens (a phone on its side): everything a little tighter */
+@media (max-height:460px){
+  .app{gap:6px; padding-block:6px} .main{gap:6px}
+  .panel{gap:4px} .page{gap:5px 16px}
+  .pageseg button{min-height:22px}
+  .tool{height:42px} .tool span{display:none} .sizedot{width:42px; height:42px} .stylebtn{min-height:42px}
+  .kl{display:none} .seg.fx button{min-height:28px}
+}

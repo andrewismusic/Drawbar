@@ -8,7 +8,7 @@ export default {
   colors: ['#15151c', '#1f3a8a', '#c8281e', '#e2681c', '#d9a514', '#2f8f4e', '#2f7fd6', '#7a48c8', '#d6468f', '#7a4a2a'],
   tools: ['glow', 'erase'],
   modes: ['free', 'kaleido', 'tiles'],
-  limits: { copies: 6, tiles: 4, turns: 3, rotate: true },
+  limits: { strokes: 40, copies: 6, tiles: 4, turns: 3, rotate: true },
   start: { mode: 'kaleido', copies: 6, spiral: 0, tiles: 4, turns: 1, mirror: true, fscale: 50, frot: false, fmirror: false, tool: 'glow', color: 'Brush ink' },
-  render: { bg: 'paper' },
+  render: { bg: 'paper', sprites: true },
 };

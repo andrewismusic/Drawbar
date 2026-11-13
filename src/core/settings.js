@@ -20,7 +20,14 @@ import { layout } from './layout.js';
 // The hidden-stroke test starts on the next frame and runs a few ms per frame (lazy: a moment later, used while erasing)
 export function rebuild(tc, lazy) { if (fb.width > 8) { ensureCanvases(); if (syncDraw) refreshHidden(); else checkHiddenSoon(lazy ? 250 : 0); } rearrange(); markGroupsDirty(); applyAudio(tc); }
 // A stroke was just added on top: draw only that stroke, re-arrange the music, and test for hidden strokes a moment later
-export function strokeAdded(s) { ensureCanvases(); appendStroke(s); checkHiddenSoon(); rearrange(); applyAudio(); }
+// Each style holds only so many strokes (limits.strokes, set where its redraw starts to drag): past that, the oldest
+// goes as the new one arrives. It goes from the music too. Undo brings it back.
+export function strokeAdded(s) {
+  ensureCanvases(); appendStroke(s);
+  const cap = world().limits.strokes;
+  if (cap && score.strokes.length > cap) { score.strokes.splice(0, score.strokes.length - cap); rebuild(undefined, true); return; }
+  checkHiddenSoon(); rearrange(); applyAudio();
+}
 // The hidden-stroke test found a change: hidden strokes are silent, so re-arrange
 export function hiddenChanged() { rearrange(); applyAudio(); }
 export function applySettings(st, tc) {
@@ -103,15 +110,15 @@ export function switchWorld(id) {
   if (id === score.world || !WORLD[id] || anim) return;
   if (preview) endPreview();
   releaseCanvases();   // a tab you are not looking at keeps only its drawing as plain data: no layers, no sound
-  worldStash[score.world] = { snap: snap(), mix: { ...mix }, undo: undoStack.splice(0), redo: redoStack.splice(0), tool: ui.tool, color: ui.color };
+  worldStash[score.world] = { snap: snap(), mix: { ...mix }, undo: undoStack.splice(0), redo: redoStack.splice(0), tool: ui.tool, color: ui.color, tint: ui.tint };
   const w = WORLD[id], st = worldStash[id];
   if (st) {
     undoStack.push(...st.undo); redoStack.push(...st.redo);
-    ui.tool = st.tool; ui.color = st.color; Object.assign(mix, st.mix);
+    ui.tool = st.tool; ui.color = st.color; ui.tint = st.tint; Object.assign(mix, st.mix);
     restore(st.snap);
   } else {
     const { tool, color, ...set } = w.start;
-    ui.tool = tool; ui.color = matIndex(color);
+    ui.tool = tool; ui.color = matIndex(color); if (w.colors) ui.tint = w.colors[0];   // each style keeps its own colour in hand
     restore({ set: { ...snap().set, ...set, world: id }, strokes: [] });
   }
   prefs.world = id; savePrefs();
